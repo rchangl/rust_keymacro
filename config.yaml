@@ -1,0 +1,51 @@
+# 键盘宏配置文件
+
+hotkeys:
+  - key: "'"
+    action: "sequence"
+    params:
+      steps:
+        - type: "key"
+          value: "E"
+          action: "press"
+          delay: 17
+
+        - type: "key" 
+          value: "R"
+          action: "press"
+          delay: 17
+
+        - type: "key"
+          value: "E"
+          action: "release"
+          delay: 17
+
+        - type: "key"
+          value: "T"
+          action: "press"
+          delay: 17
+
+        - type: "key" 
+          value: "R"
+          action: "release"
+          delay: 17
+          
+        - type: "key"
+          value: "Space"
+          action: "press"
+          delay: 17
+          
+        - type: "key"
+          value: "K"
+          action: "press"
+          delay: 17
+
+        - type: "key" 
+          value: "Space"
+          action: "release"
+        - type: "key" 
+          value: "T"
+          action: "release"
+        - type: "key" 
+          value: "K"
+          action: "release"
