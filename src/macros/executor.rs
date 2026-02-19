@@ -2,6 +2,7 @@
 //!
 //! 负责执行各种宏操作，包括输入文本和按键序列
 
+use rand::Rng;
 use std::thread;
 use std::time::Duration;
 use crate::config::{TypeTextParams, SequenceParams, Step, KeyAction};
@@ -9,11 +10,12 @@ use crate::winapi::keyboard;
 
 /// 执行输入文本操作
 pub fn execute_type_text(params: &TypeTextParams) -> Result<(), Box<dyn std::error::Error>> {
-    // 使用配置的延迟，默认为 10ms
-    let char_delay = Duration::from_millis(params.delay.unwrap_or(10));
-    
     // 输入每个字符
     for ch in params.text.chars() {
+        // 获取当前字符的延迟
+        let char_delay_ms = params.delay.as_ref().map_or(10, |d| d.get_delay());
+        let char_delay = Duration::from_millis(char_delay_ms);
+        
         if let Some(vk) = char_to_vk(ch) {
             keyboard::simulate_key_press(vk)?;
             thread::sleep(char_delay);
@@ -40,34 +42,40 @@ pub fn execute_sequence(params: &SequenceParams) -> Result<(), Box<dyn std::erro
                         KeyAction::Press => {
                             keyboard::simulate_key_press(vk)?;
                             if let Some(d) = delay {
-                                thread::sleep(Duration::from_millis(*d));
+                                thread::sleep(Duration::from_millis(d.get_delay()));
                             }
                         }
                         KeyAction::Release => {
                             keyboard::simulate_key_release(vk)?;
                             if let Some(d) = delay {
-                                thread::sleep(Duration::from_millis(*d));
+                                thread::sleep(Duration::from_millis(d.get_delay()));
                             }
                         }
                         KeyAction::Complete => {
                             keyboard::simulate_key_press(vk)?;
                             if let Some(d) = delay {
-                                thread::sleep(Duration::from_millis(*d));
+                                thread::sleep(Duration::from_millis(d.get_delay()));
                             }
                             keyboard::simulate_key_release(vk)?;
                         }
                     }
                 }
             }
-            Step::Wait { value } => {
-                thread::sleep(Duration::from_millis(*value));
+            Step::Wait { value, random } => {
+                if random == &Some(true) {
+                    // 随机范围：0 ~ value
+                    let actual_delay = rand::thread_rng().gen_range(0..=*value);
+                    thread::sleep(Duration::from_millis(actual_delay));
+                } else {
+                    thread::sleep(Duration::from_millis(*value));
+                }
             }
             Step::Text { value, delay } => {
                 for ch in value.chars() {
                     if let Some(vk) = char_to_vk(ch) {
                         keyboard::simulate_key_press(vk)?;
                         if let Some(d) = delay {
-                            thread::sleep(Duration::from_millis(*d));
+                            thread::sleep(Duration::from_millis(d.get_delay()));
                         }
                         keyboard::simulate_key_release(vk)?;
                     } else {

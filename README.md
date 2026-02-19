@@ -33,6 +33,8 @@ hotkeys:
 **参数：**
 - `text` (必需): 要输入的文本字符串
 - `delay` (可选): 每个字符输入后的等待毫秒数，默认为 10ms
+  - 支持固定值: `delay: 10`
+  - 支持随机范围: `delay: { min: 5, max: 15 }` (在5-15毫秒之间随机)
 
 **示例：**
 ```yaml
@@ -55,6 +57,8 @@ hotkeys:
 1. **key** - 按键
    - `value`: 按键名称 (A-Z, 0-9, Space, Enter等)
    - `delay` (可选): 按键后等待的毫秒数
+     - 固定值: `delay: 50`
+     - 随机范围: `delay: { min: 10, max: 30 }`
    - `action` (可选): 按键动作类型
      - `press`: 只按下按键（不释放）
      - `release`: 只释放按键
@@ -62,10 +66,13 @@ hotkeys:
 
 2. **wait** - 等待
    - `value`: 等待的毫秒数
+   - `random` (可选): 设置为 `true` 时在 `0 ~ value` 范围内随机等待
 
 3. **text** - 输入文本
    - `value`: 要输入的文本字符串
    - `delay` (可选): 每个字符输入后的等待毫秒数
+     - 固定值: `delay: 50`
+     - 随机范围: `delay: { min: 5, max: 15 }`
 
 **示例：**
 ```yaml
@@ -166,7 +173,33 @@ hotkeys:
           value: "done"
 ```
 
-### 示例 4: 分离按键按下和释放（高级）
+### 示例 4: 使用随机延迟
+
+通过随机延迟让宏执行更具不确定性，模拟人工操作：
+
+```yaml
+hotkeys:
+  - key: "F5"
+    action: "sequence"
+    params:
+      steps:
+        # 按键延迟在 10-30ms 之间随机
+        - type: "key"
+          value: "A"
+          delay: { min: 10, max: 30 }
+        
+        # 等待时间在 0-500ms 之间随机
+        - type: "wait"
+          value: 500
+          random: true
+        
+        # 输入文本，每个字符延迟在 5-15ms 之间随机
+        - type: "text"
+          value: "hello"
+          delay: { min: 5, max: 15 }
+```
+
+### 示例 5: 分离按键按下和释放（高级）
 
 通过 `action` 参数控制按键的按下和释放，实现组合键效果：
 

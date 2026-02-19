@@ -1,4 +1,11 @@
 # 键盘宏配置文件
+#
+# 延迟配置支持两种格式：
+#   1. 固定延迟: delay: 17  (单位：毫秒)
+#   2. 随机延迟: delay: { min: 10, max: 30 }  (在10-30毫秒之间随机)
+#
+# Wait 步骤支持随机等待:
+#   - random: true 表示在 0 ~ value 之间随机等待
 
 hotkeys:
   - key: "'"
@@ -8,44 +15,47 @@ hotkeys:
         - type: "key"
           value: "E"
           action: "press"
-          delay: 17
+          delay: { min: 24, max: 48}
 
         - type: "key" 
           value: "R"
           action: "press"
-          delay: 17
+          delay: { min: 14, max: 32}
 
         - type: "key"
           value: "E"
           action: "release"
-          delay: 17
+          delay: { min: 14, max: 32}
 
         - type: "key"
           value: "T"
           action: "press"
-          delay: 17
+          delay: { min: 14, max: 32}
 
         - type: "key" 
           value: "R"
           action: "release"
-          delay: 17
+          delay: { min: 14, max: 32}
           
         - type: "key"
           value: "Space"
           action: "press"
-          delay: 17
+          delay: { min: 14, max: 32}
           
         - type: "key"
           value: "K"
           action: "press"
-          delay: 17
+          delay: { min: 100, max: 200}
 
         - type: "key" 
           value: "Space"
           action: "release"
+          delay: 30
         - type: "key" 
           value: "T"
           action: "release"
+          delay: 25
         - type: "key" 
           value: "K"
           action: "release"
+          delay: { min: 100, max: 200}

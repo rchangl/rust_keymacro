@@ -156,7 +156,12 @@ pub unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: windows::Win
                             return keyboard::call_next_hook(HHOOK::default(), code, wparam, lparam);
                         }
                         
-                        // 首次按下，发送事件
+                        // 检查是否正在执行宏，如果是则丢弃新事件（防止堆积）
+                        if get_macro_phase() != MacroPhase::Idle {
+                            return LRESULT(1); // 阻止原始事件，但不发送新事件
+                        }
+                        
+                        // 首次按下且空闲状态，发送事件
                         if let Some(sender) = get_event_sender() {
                             let _ = sender.send(MacroEvent::HotkeyPressed { key_name });
                         }
@@ -164,8 +169,12 @@ pub unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: windows::Win
                     }
                     // 处理松开事件
                     else if keyboard::is_key_up(wparam) {
-                        if let Some(sender) = get_event_sender() {
-                            let _ = sender.send(MacroEvent::HotkeyReleased { key_name });
+                        // 只有当前正在执行该热键的宏时才发送释放事件
+                        // 这样可以防止事件堆积，也能避免处理过期的释放事件
+                        if get_macro_phase() == MacroPhase::Executing {
+                            if let Some(sender) = get_event_sender() {
+                                let _ = sender.send(MacroEvent::HotkeyReleased { key_name });
+                            }
                         }
                         return LRESULT(1); // 阻止原始事件
                     }

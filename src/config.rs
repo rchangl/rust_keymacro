@@ -2,9 +2,32 @@
 //!
 //! 支持从 YAML 文件加载键盘宏配置
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+
+/// 延迟配置，支持固定值或随机范围
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DelayConfig {
+    /// 固定延迟值（毫秒）
+    Fixed(u64),
+    /// 随机延迟范围（毫秒）
+    Range { min: u64, max: u64 },
+}
+
+impl DelayConfig {
+    /// 获取实际延迟值（如果是随机范围则生成随机值）
+    pub fn get_delay(&self) -> u64 {
+        match self {
+            DelayConfig::Fixed(ms) => *ms,
+            DelayConfig::Range { min, max } => {
+                rand::thread_rng().gen_range(*min..=*max)
+            }
+        }
+    }
+}
 
 /// 配置文件根结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,7 +59,7 @@ pub enum ActionParams {
 pub struct TypeTextParams {
     pub text: String,
     #[serde(default)]
-    pub delay: Option<u64>,
+    pub delay: Option<DelayConfig>,
 }
 
 /// 序列参数
@@ -67,12 +90,16 @@ pub enum Step {
     Key { 
         value: String, 
         #[serde(default)] 
-        delay: Option<u64>,
+        delay: Option<DelayConfig>,
         #[serde(default)]
         action: Option<KeyAction>,
     },
-    Wait { value: u64 },
-    Text { value: String, #[serde(default)] delay: Option<u64> },
+    Wait { 
+        value: u64,
+        #[serde(default)]
+        random: Option<bool>,
+    },
+    Text { value: String, #[serde(default)] delay: Option<DelayConfig> },
 }
 
 impl Config {
@@ -119,7 +146,7 @@ hotkeys:
         
         if let ActionParams::TypeText(params) = &hotkey.params {
             assert_eq!(params.text, "hello");
-            assert_eq!(params.delay, Some(5));
+            assert!(matches!(params.delay, Some(DelayConfig::Fixed(5))));
         } else {
             panic!("Expected TypeText params");
         }
@@ -149,7 +176,7 @@ hotkeys:
             match &params.steps[0] {
                 Step::Key { value, delay, action } => {
                     assert_eq!(value, "a");
-                    assert_eq!(*delay, Some(50));
+                    assert!(matches!(delay, Some(DelayConfig::Fixed(50))));
                     assert_eq!(*action, None); // 默认值为 None，会使用 KeyAction::Complete
                 }
                 _ => panic!("Expected Key step"),
@@ -195,6 +222,55 @@ hotkeys:
                     assert!(matches!(action, Some(KeyAction::Release)));
                 }
                 _ => panic!("Expected Key step"),
+            }
+        } else {
+            panic!("Expected Sequence params");
+        }
+    }
+
+    #[test]
+    fn test_parse_random_delay_config() {
+        let yaml = r#"
+hotkeys:
+  - key: "F3"
+    action: "sequence"
+    params:
+      steps:
+        - { type: "key", value: "a", delay: { min: 10, max: 30 } }
+        - { type: "wait", value: 100, random: true }
+        - { type: "text", value: "done", delay: { min: 5, max: 15 } }
+"#;
+        let config = Config::from_str(yaml).unwrap();
+        assert_eq!(config.hotkeys.len(), 1);
+        
+        if let ActionParams::Sequence(params) = &config.hotkeys[0].params {
+            assert_eq!(params.steps.len(), 3);
+            
+            // 测试随机延迟范围
+            match &params.steps[0] {
+                Step::Key { value, delay, .. } => {
+                    assert_eq!(value, "a");
+                    assert!(matches!(delay, Some(DelayConfig::Range { min: 10, max: 30 })));
+                }
+                _ => panic!("Expected Key step"),
+            }
+            
+            // 测试随机等待
+            match &params.steps[1] {
+                Step::Wait { value, random } => {
+                    assert_eq!(*value, 100);
+                    assert_eq!(*random, Some(true));
+                }
+                _ => panic!("Expected Wait step"),
+            }
+            
+            // 测试文本随机延迟
+            match &params.steps[2] {
+                Step::Text { value, delay } => {
+                    assert_eq!(value, "done");
+                    assert!(matches!(delay, Some(DelayConfig::Range { min: 5, max: 15 })));
+                }
+                _ => panic!("Expected Text step"),
             }
         } else {
             panic!("Expected Sequence params");
