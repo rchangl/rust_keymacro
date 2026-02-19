@@ -1,0 +1,103 @@
+//! 键盘宏功能模块
+//!
+//! 从配置文件加载热键映射，支持多种操作类型
+
+mod executor;
+mod handler;
+
+pub use executor::{execute_type_text, execute_sequence};
+pub use handler::{keyboard_hook_proc, MacroEvent, MacroPhase};
+
+use std::sync::{Mutex, mpsc::Sender};
+use once_cell::sync::Lazy;
+use windows::Win32::UI::WindowsAndMessaging::HHOOK;
+use crate::config::Config;
+
+// 全局变量
+static TOGGLE_STATE: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(true));
+static MACRO_PHASE: Lazy<Mutex<MacroPhase>> = Lazy::new(|| Mutex::new(MacroPhase::Idle));
+static MACRO_EVENT_SENDER: Lazy<Mutex<Option<Sender<MacroEvent>>>> = Lazy::new(|| Mutex::new(None));
+static CONFIG: Lazy<Mutex<Option<Config>>> = Lazy::new(|| Mutex::new(None));
+
+/// 初始化键盘宏系统
+///
+/// # 参数
+///
+/// * `config` - 配置对象
+///
+/// # 返回
+///
+/// 成功返回钩子句柄，失败返回 None
+///
+/// # 说明
+///
+/// 设置低级键盘钩子监听全局键盘事件，启动宏处理线程
+pub fn init_keyboard_macro_system(config: Config) -> Option<HHOOK> {
+    // 保存配置
+    if let Ok(mut config_guard) = CONFIG.lock() {
+        *config_guard = Some(config);
+    }
+    
+    handler::start_macro_thread();
+    
+    match crate::winapi::keyboard::set_keyboard_hook(Some(handler::keyboard_hook_proc), 0) {
+        Ok(hook) => Some(hook),
+        Err(e) => {
+            eprintln!("[WARN] 设置键盘钩子失败: {}", e);
+            None
+        }
+    }
+}
+
+/// 设置配置（用于运行时重载）
+#[allow(dead_code)]
+pub fn set_config(config: Config) {
+    if let Ok(mut config_guard) = CONFIG.lock() {
+        *config_guard = Some(config);
+    }
+}
+
+/// 设置宏启用状态
+///
+/// # 参数
+///
+/// * `enabled` - true 启用，false 禁用
+pub fn set_macro_enabled(enabled: bool) {
+    if let Ok(mut state) = TOGGLE_STATE.lock() {
+        *state = enabled;
+    }
+}
+
+/// 清理键盘钩子
+///
+/// # 参数
+///
+/// * `hook` - 要卸载的钩子句柄
+pub fn cleanup_keyboard_hook(hook: HHOOK) {
+    if let Err(e) = crate::winapi::keyboard::unhook_keyboard_hook(hook) {
+        eprintln!("[DEBUG] 卸载键盘钩子失败: {}", e);
+    }
+}
+
+// 内部使用的全局访问函数
+pub(crate) fn get_toggle_state() -> bool {
+    TOGGLE_STATE.lock().map(|s| *s).unwrap_or(false)
+}
+
+pub(crate) fn get_macro_phase() -> MacroPhase {
+    MACRO_PHASE.lock().map(|p| *p).unwrap_or(MacroPhase::Idle)
+}
+
+pub(crate) fn set_macro_phase(phase: MacroPhase) {
+    if let Ok(mut p) = MACRO_PHASE.lock() {
+        *p = phase;
+    }
+}
+
+pub(crate) fn get_config() -> Option<Config> {
+    CONFIG.lock().ok().and_then(|g| g.clone())
+}
+
+pub(crate) fn get_event_sender() -> Option<Sender<MacroEvent>> {
+    MACRO_EVENT_SENDER.lock().ok().and_then(|g| g.clone())
+}

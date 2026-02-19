@@ -5,12 +5,7 @@
 
 #![windows_subsystem = "windows"] // 隐藏控制台窗口
 
-mod app;
-mod overlay;
-mod macros;
-mod winapi;
-mod config;
-mod bootstrap;
+use rust_keymacro::bootstrap;
 
 /// 应用程序主入口
 ///
