@@ -28,15 +28,11 @@ hotkeys:
 
 ### 1. type_text - 输入文本
 
-快速输入指定文本，支持设置输入速度。
+快速输入指定文本，支持设置输入延迟。
 
 **参数：**
 - `text` (必需): 要输入的文本字符串
-- `speed` (可选): 输入速度，可选值：
-  - `fastest`: 最快 (5ms)
-  - `fast`: 快 (10ms)
-  - `normal`: 正常 (20ms)
-  - `slow`: 慢 (50ms)
+- `delay` (可选): 每个字符输入后的等待毫秒数，默认为 10ms
 
 **示例：**
 ```yaml
@@ -44,7 +40,7 @@ hotkeys:
   action: "type_text"
   params:
     text: "hello world"
-    speed: "fast"
+    delay: 10
 ```
 
 ### 2. sequence - 执行按键序列
@@ -118,13 +114,13 @@ hotkeys:
     action: "type_text"
     params:
       text: "hello"
-      speed: "fastest"
+      delay: 5
 
   - key: "F3"
     action: "type_text"
     params:
       text: "world"
-      speed: "fast"
+      delay: 10
 ```
 
 ### 示例 2: 复杂按键序列

@@ -36,7 +36,7 @@ pub enum ActionParams {
 pub struct TypeTextParams {
     pub text: String,
     #[serde(default)]
-    pub speed: Option<String>,
+    pub delay: Option<u64>,
 }
 
 /// 序列参数
@@ -108,7 +108,7 @@ hotkeys:
     action: "type_text"
     params:
       text: "hello"
-      speed: "fastest"
+      delay: 5
 "#;
         let config = Config::from_str(yaml).unwrap();
         assert_eq!(config.hotkeys.len(), 1);
@@ -119,7 +119,7 @@ hotkeys:
         
         if let ActionParams::TypeText(params) = &hotkey.params {
             assert_eq!(params.text, "hello");
-            assert_eq!(params.speed, Some("fastest".to_string()));
+            assert_eq!(params.delay, Some(5));
         } else {
             panic!("Expected TypeText params");
         }

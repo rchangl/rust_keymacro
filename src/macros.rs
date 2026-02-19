@@ -194,14 +194,8 @@ fn execute_hotkey_release(_key_name: &str) -> Result<(), Box<dyn std::error::Err
 
 /// 执行输入文本操作
 fn execute_type_text(params: &crate::config::TypeTextParams) -> Result<(), Box<dyn std::error::Error>> {
-    // 根据速度设置延迟
-    let char_delay = match params.speed.as_deref() {
-        Some("fastest") => Duration::from_millis(5),
-        Some("fast") => Duration::from_millis(10),
-        Some("normal") => Duration::from_millis(20),
-        Some("slow") => Duration::from_millis(50),
-        _ => Duration::from_millis(10),
-    };
+    // 使用配置的延迟，默认为 10ms
+    let char_delay = Duration::from_millis(params.delay.unwrap_or(10));
     
     // 输入每个字符
     for ch in params.text.chars() {
