@@ -67,7 +67,7 @@ pub fn show_overlay(text: &str) {
             };
             
             if let Err(e) = window::register_window_class(&info) {
-                eprintln!("[WARN] 注册窗口类失败: {}", e);
+                log::warn!("注册窗口类失败: {}", e);
             }
         });
         
@@ -91,7 +91,7 @@ pub fn show_overlay(text: &str) {
         let hwnd = match window::create_window(&create_info) {
             Ok(hwnd) => hwnd,
             Err(e) => {
-                eprintln!("[WARN] 创建窗口失败: {}", e);
+                log::warn!("创建窗口失败: {}", e);
                 return;
             }
         };
@@ -263,7 +263,7 @@ fn close_existing_window_async() {
         
         // 发送关闭消息
         if let Err(e) = window::post_close_message(hwnd_value) {
-            eprintln!("[WARN] 发送关闭消息失败: {}", e);
+            log::warn!("发送关闭消息失败: {}", e);
             let _ = window::destroy_window(HWND(hwnd_value as *mut core::ffi::c_void));
         }
     }

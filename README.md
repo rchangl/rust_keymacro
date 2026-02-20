@@ -1,6 +1,6 @@
 # 配置文件驱动键盘宏系统
 
-本项目现已支持通过 YAML 配置文件来定义键盘宏操作，无需修改代码即可添加、修改或删除热键功能。
+本项目支持通过 YAML 配置文件来定义键盘宏操作，同时支持 **键盘热键** 和 **手柄按键** 触发，无需修改代码即可添加、修改或删除热键功能。
 
 ## 全局开关
 
@@ -10,6 +10,16 @@
 - 开关状态切换时，会有弹出文字和图标变化来指示当前状态
 - 关闭状态下，按配置的快捷键将不会触发任何宏操作
 
+## 功能特性
+
+- **键盘热键触发** - 支持各种键盘按键作为触发器
+- **手柄按键触发** - 支持 Xbox 协议手柄（有线/无线）
+- **配置文件驱动** - 通过 YAML 文件定义宏，无需修改代码
+- **多种操作类型** - 支持输入文本、按键序列、等待等
+- **随机延迟** - 支持固定或随机延迟，模拟人工操作
+- **全局热键** - 全局开关控制所有宏功能
+- **系统托盘** - 最小化到系统托盘，显示当前状态
+
 ## 配置文件结构
 
 配置文件 `config.yaml` 采用 YAML 格式，包含一个 `hotkeys` 数组，每个元素定义一个热键配置。
@@ -18,11 +28,59 @@
 
 ```yaml
 hotkeys:
-  - key: "热键名称"
+  - type: "keyboard"  # 触发源类型：keyboard 或 gamepad
+    key: "热键名称"   # 键盘热键名称（type=keyboard 时使用）
+    button: "A"       # 手柄按钮名称（type=gamepad 时使用）
     action: "操作类型"
     params:
       # 操作参数
 ```
+
+### 触发源类型
+
+#### 1. 键盘触发 (`type: keyboard`)
+
+使用键盘按键作为触发器。
+
+**必需字段：**
+- `key`: 键盘按键名称
+
+**支持的按键：**
+- 字母：`A` - `Z`
+- 数字：`0` - `9`
+- 功能键：`F1` - `F24`
+- 特殊键：`Space`, `Enter`, `Tab`, `Backspace`, `Escape`
+- 修饰键：`Shift`, `Ctrl`, `Alt`
+
+#### 2. 手柄触发 (`type: gamepad`)
+
+使用 Xbox 协议手柄按键作为触发器。
+
+**必需字段：**
+- `button`: 手柄按钮名称
+
+**支持的按钮：**
+| 按钮名 | 说明 |
+|-------|------|
+| `A` | A 键（底部） |
+| `B` | B 键（右侧） |
+| `X` | X 键（左侧） |
+| `Y` | Y 键（顶部） |
+| `LB` | 左肩键 |
+| `RB` | 右肩键 |
+| `LT` | 左扳机（暂未支持） |
+| `RT` | 右扳机（暂未支持） |
+| `Start` | 菜单键 |
+| `Back` | 返回/视图键 |
+| `Guide` | Xbox 按钮 |
+| `LS` | 左摇杆按下 |
+| `RS` | 右摇杆按下 |
+| `DUp` | 十字键上 |
+| `DDown` | 十字键下 |
+| `DLeft` | 十字键左 |
+| `DRight` | 十字键右 |
+
+**注意：** 支持国产 Xbox 兼容手柄和官方 Xbox 手柄。
 
 ## 支持的操作类型
 
@@ -38,7 +96,8 @@ hotkeys:
 
 **示例：**
 ```yaml
-- key: "F2"
+- type: "keyboard"
+  key: "F2"
   action: "type_text"
   params:
     text: "hello world"
@@ -76,7 +135,8 @@ hotkeys:
 
 **示例：**
 ```yaml
-- key: "'"
+- type: "keyboard"
+  key: "'"
   action: "sequence"
   params:
     steps:
@@ -95,91 +155,80 @@ hotkeys:
         delay: 50
 ```
 
-## 支持的按键名称
-
-### 字母和数字
-- 字母：`A` - `Z`（不区分大小写）
-- 数字：`0` - `9`
-
-### 特殊按键
-- `Space` - 空格键
-- `Enter` - 回车键
-- `Tab` - Tab键
-- `Backspace` - 退格键
-- `Escape` - Esc键
-- `Shift` - Shift键
-- `Ctrl` - Ctrl键
-- `Alt` - Alt键
-- `F1` - `F24` - 功能键
-
 ## 配置示例
 
-### 示例 1: 快速输入常用文本
+### 示例 1: 键盘热键触发
+
 ```yaml
 hotkeys:
-  - key: "F2"
+  # 按 F2 输入 "hello"
+  - type: "keyboard"
+    key: "F2"
     action: "type_text"
     params:
       text: "hello"
       delay: 5
 
-  - key: "F3"
+  # 按 F3 输入 "world"
+  - type: "keyboard"
+    key: "F3"
     action: "type_text"
     params:
       text: "world"
       delay: 10
 ```
 
-### 示例 2: 复杂按键序列
+### 示例 2: 手柄按键触发
+
 ```yaml
 hotkeys:
-  - key: "'"
+  # 手柄 A 键触发空格键
+  - type: "gamepad"
+    button: "A"
     action: "sequence"
     params:
       steps:
-        - type: "key"
-          value: "E"
-          delay: 17
-        - type: "key"
-          value: "R"
-          delay: 17
-        - type: "key"
-          value: "E"
-        - type: "key"
-          value: "T"
-          delay: 17
-        - type: "key"
-          value: "R"
         - type: "key"
           value: "Space"
-```
+          action: "press"
+          delay: 50
+        - type: "key"
+          value: "Space"
+          action: "release"
+          delay: 50
 
-### 示例 3: 带等待的序列
-```yaml
-hotkeys:
-  - key: "A"
+  # 手柄 B 键输入文本
+  - type: "gamepad"
+    button: "B"
+    action: "type_text"
+    params:
+      text: "Hello from gamepad!"
+      delay: 10
+
+  # 手柄 X 键执行复杂序列
+  - type: "gamepad"
+    button: "X"
     action: "sequence"
     params:
       steps:
         - type: "key"
-          value: "a"
-          delay: 50
+          value: "E"
+          delay: 20
         - type: "key"
-          value: "b"
-          delay: 50
-        - type: "wait"
-          value: 100
-        - type: "text"
-          value: "done"
+          value: "R"
+          delay: 20
+        - type: "key"
+          value: "T"
 ```
 
-### 示例 4: 使用随机延迟
+### 示例 3: 使用随机延迟
 
 通过随机延迟让宏执行更具不确定性，模拟人工操作：
 
 ```yaml
 hotkeys:
-  - key: "F5"
+  - type: "keyboard"
+    key: "F5"
     action: "sequence"
     params:
       steps:
@@ -199,13 +248,14 @@ hotkeys:
           delay: { min: 5, max: 15 }
 ```
 
-### 示例 5: 分离按键按下和释放（高级）
+### 示例 4: 分离按键按下和释放（高级）
 
 通过 `action` 参数控制按键的按下和释放，实现组合键效果：
 
 ```yaml
 hotkeys:
-  - key: "F4"
+  - type: "keyboard"
+    key: "F4"
     action: "sequence"
     params:
       steps:
@@ -234,44 +284,91 @@ hotkeys:
           action: "release"
 ```
 
-在这个示例中：
-1. 首先按下 `Shift` 键并保持
-2. 然后按下 `A` 键，由于 Shift 处于按住状态，会输入大写字母 A
-3. 等待 100 毫秒
-4. 释放 `A` 键
-5. 释放 `Shift` 键
+## 编译和运行
 
-**注意：** 无论是 `press`、`release` 还是默认的 `complete` 动作，都可以使用 `delay` 参数来控制在按键动作后等待的时间（毫秒）。例如：
+### Debug 模式（开发调试）
 
-```yaml
-- type: "key"
-  value: "A"
-  action: "press"
-  delay: 50  # 按下后等待50毫秒
+```bash
+cargo run
 ```
 
-这种控制方式可以实现复杂的组合键操作和精确的按键时序控制。
+- 会创建 `app.log` 日志文件记录调试信息
+- 包含详细的日志输出，便于排查问题
 
-## 热键冲突处理
+### Release 模式（正式发布）
 
-如果配置文件中定义了相同的热键，只有第一个会被使用。
+```bash
+cargo build --release
+```
 
-## 运行时配置重载
+- 不会创建任何日志文件
+- 不会输出任何日志信息
+- 性能更优，适合日常使用
 
-目前配置在程序启动时加载。要应用新的配置，需要重启程序。
-
-## 调试
-
-如果配置加载失败：
-1. 检查 YAML 语法是否正确（可使用在线 YAML 验证工具）
-2. 确保所有必需字段都存在
-3. 查看控制台输出（如果使用 `--console` 参数运行）
-4. 检查按键名称是否支持
+编译完成后，可执行文件位于：
+- Debug: `target/debug/rust_keymacro.exe`
+- Release: `target/release/rust_keymacro.exe`
 
 ## 配置文件位置
 
 配置文件必须命名为 `config.yaml`，并与程序可执行文件放在同一目录下。
 
-## 示例配置文件
+## 热键冲突处理
 
-项目中包含一个 `config.yaml` 示例文件，展示了所有支持的功能。你可以基于该文件进行修改。
+- 如果配置文件中定义了相同的热键，只有第一个会被使用
+- 键盘热键和手柄热键相互独立，不会冲突
+
+## 运行时配置重载
+
+目前配置在程序启动时加载。要应用新的配置，需要重启程序。
+
+## 故障排查
+
+### 手柄无法识别
+
+1. 确保手柄已通过 USB 连接或无线接收器已插入
+2. 在 Windows 中测试手柄：按 `Win + R`，输入 `joy.cpl` 回车
+3. 确保手柄是 Xbox 兼容协议
+4. 查看 Debug 模式的日志文件了解详细信息
+
+### 配置加载失败
+
+1. 检查 YAML 语法是否正确（可使用在线 YAML 验证工具）
+2. 确保所有必需字段都存在
+3. 在 Debug 模式下查看 `app.log` 日志文件
+4. 检查按键/按钮名称是否支持
+
+### 宏不执行
+
+1. 确认全局开关已开启（按 `Ctrl + ` 查看状态）
+2. 检查目标窗口是否有焦点
+3. 某些游戏可能需要以管理员身份运行本程序
+4. 杀毒软件可能会拦截键盘模拟，尝试添加白名单
+
+## 项目结构
+
+```
+rust_keymacro/
+├── Cargo.toml          # 项目配置
+├── config.yaml         # 配置文件示例
+├── src/
+│   ├── main.rs         # 程序入口
+│   ├── lib.rs          # 库入口
+│   ├── app.rs          # 托盘应用
+│   ├── bootstrap.rs    # 启动逻辑
+│   ├── config.rs       # 配置解析
+│   ├── gamepad/        # 手柄支持模块
+│   │   └── mod.rs
+│   ├── macros/         # 宏执行模块
+│   │   ├── mod.rs
+│   │   ├── executor.rs
+│   │   └── handler.rs
+│   ├── overlay.rs      # 屏幕提示
+│   └── winapi/         # Windows API 封装
+│       └── keyboard.rs
+└── README.md
+```
+
+## 许可证
+
+MIT License

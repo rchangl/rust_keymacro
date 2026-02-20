@@ -26,39 +26,49 @@ pub fn execute_type_text(params: &TypeTextParams) -> Result<(), Box<dyn std::err
             simulate_unicode_char(ch)?;
         }
     }
-    
+
+    log::info!("序列执行完成");
     Ok(())
 }
 
 /// 执行序列操作
 pub fn execute_sequence(params: &SequenceParams) -> Result<(), Box<dyn std::error::Error>> {
-    for step in &params.steps {
+    log::info!("开始执行序列，共 {} 个步骤", params.steps.len());
+    for (idx, step) in params.steps.iter().enumerate() {
+        log::debug!("执行步骤 {}: {:?}", idx + 1, step);
         match step {
             Step::Key { value, delay, action } => {
                 if let Some(vk) = parse_key_string(value) {
                     let key_action = action.as_ref().unwrap_or(&KeyAction::Complete);
-                    
+                    log::debug!("按键: {}, 动作: {:?}", value, key_action);
+
                     match key_action {
                         KeyAction::Press => {
                             keyboard::simulate_key_press(vk)?;
+                            log::debug!("按下按键: {}", value);
                             if let Some(d) = delay {
                                 thread::sleep(Duration::from_millis(d.get_delay()));
                             }
                         }
                         KeyAction::Release => {
                             keyboard::simulate_key_release(vk)?;
+                            log::debug!("释放按键: {}", value);
                             if let Some(d) = delay {
                                 thread::sleep(Duration::from_millis(d.get_delay()));
                             }
                         }
                         KeyAction::Complete => {
                             keyboard::simulate_key_press(vk)?;
+                            log::debug!("按下按键: {}", value);
                             if let Some(d) = delay {
                                 thread::sleep(Duration::from_millis(d.get_delay()));
                             }
                             keyboard::simulate_key_release(vk)?;
+                            log::debug!("释放按键: {}", value);
                         }
                     }
+                } else {
+                    log::warn!("无法解析按键: {}", value);
                 }
             }
             Step::Wait { value, random } => {
@@ -85,7 +95,8 @@ pub fn execute_sequence(params: &SequenceParams) -> Result<(), Box<dyn std::erro
             }
         }
     }
-    
+
+    log::info!("序列执行完成");
     Ok(())
 }
 

@@ -35,15 +35,48 @@ pub struct Config {
     pub hotkeys: Vec<HotkeyConfig>,
 }
 
+/// 触发源类型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum TriggerSource {
+    /// 键盘按键，如 "F2", "'"
+    Keyboard { key: String },
+    /// 手柄按键，如 "A", "LT", "DUp"
+    Gamepad { button: String },
+}
+
+impl TriggerSource {
+    /// 获取触发键名称（用于查找）
+    pub fn key_name(&self) -> String {
+        match self {
+            TriggerSource::Keyboard { key } => key.clone(),
+            TriggerSource::Gamepad { button } => format!("GP:{}", button),
+        }
+    }
+
+    /// 检查是否匹配给定的键名
+    pub fn matches(&self, name: &str) -> bool {
+        self.key_name().eq_ignore_ascii_case(name)
+    }
+}
+
 /// 单个热键配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HotkeyConfig {
-    /// 触发键，如 "F2", "Ctrl+Shift+A"
-    pub key: String,
+    /// 触发源配置（新格式）
+    #[serde(flatten)]
+    pub trigger: TriggerSource,
     /// 操作类型："type_text" 或 "sequence"
     pub action: String,
     /// 操作参数
     pub params: ActionParams,
+}
+
+impl HotkeyConfig {
+    /// 兼容旧配置的 key 字段
+    pub fn key(&self) -> String {
+        self.trigger.key_name()
+    }
 }
 
 /// 操作参数
@@ -119,7 +152,7 @@ impl Config {
 
     /// 查找指定键的配置
     pub fn find_hotkey(&self, key: &str) -> Option<&HotkeyConfig> {
-        self.hotkeys.iter().find(|h| h.key.eq_ignore_ascii_case(key))
+        self.hotkeys.iter().find(|h| h.trigger.matches(key))
     }
 }
 
@@ -131,7 +164,8 @@ mod tests {
     fn test_parse_type_text_config() {
         let yaml = r#"
 hotkeys:
-  - key: "F2"
+  - type: keyboard
+    key: "F2"
     action: "type_text"
     params:
       text: "hello"
@@ -139,11 +173,11 @@ hotkeys:
 "#;
         let config = Config::from_str(yaml).unwrap();
         assert_eq!(config.hotkeys.len(), 1);
-        
+
         let hotkey = &config.hotkeys[0];
-        assert_eq!(hotkey.key, "F2");
+        assert_eq!(hotkey.key(), "F2");
         assert_eq!(hotkey.action, "type_text");
-        
+
         if let ActionParams::TypeText(params) = &hotkey.params {
             assert_eq!(params.text, "hello");
             assert!(matches!(params.delay, Some(DelayConfig::Fixed(5))));
@@ -153,10 +187,35 @@ hotkeys:
     }
 
     #[test]
+    fn test_parse_gamepad_config() {
+        let yaml = r#"
+hotkeys:
+  - type: gamepad
+    button: "A"
+    action: "sequence"
+    params:
+      steps:
+        - { type: "key", value: "Space", action: "press" }
+"#;
+        let config = Config::from_str(yaml).unwrap();
+        assert_eq!(config.hotkeys.len(), 1);
+
+        let hotkey = &config.hotkeys[0];
+        assert_eq!(hotkey.key(), "GP:A");
+        assert_eq!(hotkey.action, "sequence");
+
+        match &hotkey.trigger {
+            TriggerSource::Gamepad { button } => assert_eq!(button, "A"),
+            _ => panic!("Expected Gamepad trigger"),
+        }
+    }
+
+    #[test]
     fn test_parse_sequence_config() {
         let yaml = r#"
 hotkeys:
-  - key: "Ctrl+Shift+A"
+  - type: keyboard
+    key: "Ctrl+Shift+A"
     action: "sequence"
     params:
       steps:
@@ -166,11 +225,11 @@ hotkeys:
 "#;
         let config = Config::from_str(yaml).unwrap();
         assert_eq!(config.hotkeys.len(), 1);
-        
+
         let hotkey = &config.hotkeys[0];
-        assert_eq!(hotkey.key, "Ctrl+Shift+A");
+        assert_eq!(hotkey.key(), "Ctrl+Shift+A");
         assert_eq!(hotkey.action, "sequence");
-        
+
         if let ActionParams::Sequence(params) = &hotkey.params {
             assert_eq!(params.steps.len(), 3);
             match &params.steps[0] {
@@ -190,7 +249,8 @@ hotkeys:
     fn test_parse_key_action_config() {
         let yaml = r#"
 hotkeys:
-  - key: "F1"
+  - type: keyboard
+    key: "F1"
     action: "sequence"
     params:
       steps:
@@ -202,10 +262,10 @@ hotkeys:
 "#;
         let config = Config::from_str(yaml).unwrap();
         assert_eq!(config.hotkeys.len(), 1);
-        
+
         if let ActionParams::Sequence(params) = &config.hotkeys[0].params {
             assert_eq!(params.steps.len(), 5);
-            
+
             // 测试 press 动作
             match &params.steps[0] {
                 Step::Key { value, action, .. } => {
@@ -214,7 +274,7 @@ hotkeys:
                 }
                 _ => panic!("Expected Key step"),
             }
-            
+
             // 测试 release 动作
             match &params.steps[3] {
                 Step::Key { value, action, .. } => {
@@ -232,7 +292,8 @@ hotkeys:
     fn test_parse_random_delay_config() {
         let yaml = r#"
 hotkeys:
-  - key: "F3"
+  - type: keyboard
+    key: "F3"
     action: "sequence"
     params:
       steps:
@@ -242,10 +303,10 @@ hotkeys:
 "#;
         let config = Config::from_str(yaml).unwrap();
         assert_eq!(config.hotkeys.len(), 1);
-        
+
         if let ActionParams::Sequence(params) = &config.hotkeys[0].params {
             assert_eq!(params.steps.len(), 3);
-            
+
             // 测试随机延迟范围
             match &params.steps[0] {
                 Step::Key { value, delay, .. } => {
@@ -254,7 +315,7 @@ hotkeys:
                 }
                 _ => panic!("Expected Key step"),
             }
-            
+
             // 测试随机等待
             match &params.steps[1] {
                 Step::Wait { value, random } => {
@@ -263,7 +324,7 @@ hotkeys:
                 }
                 _ => panic!("Expected Wait step"),
             }
-            
+
             // 测试文本随机延迟
             match &params.steps[2] {
                 Step::Text { value, delay } => {

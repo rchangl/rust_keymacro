@@ -5,6 +5,8 @@
 pub mod app;
 pub mod bootstrap;
 pub mod config;
-pub mod overlay;
-pub mod winapi;
+pub mod logger;
 pub mod macros;
+pub mod overlay;
+pub mod gamepad;
+pub mod winapi;

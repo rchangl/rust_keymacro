@@ -1,5 +1,24 @@
 # 键盘宏配置文件
 #
+# 触发源类型（type）：
+#   - keyboard: 键盘按键触发
+#   - gamepad: 手柄按键触发
+#
+# 键盘按键名（key）：
+#   - 字母: A-Z
+#   - 数字: 0-9
+#   - F键: F1-F12
+#   - 特殊: Space, Enter, Tab, Backspace, Escape, Shift, Ctrl, Alt
+#   - 符号: ` (反引号), ' (单引号)
+#
+# 手柄按键名（button）：
+#   - 动作键: A, B, X, Y
+#   - 肩键: LB, RB
+#   - 扳机: LT, RT
+#   - 菜单: Start, Back, Guide
+#   - 摇杆: LS (左摇杆按下), RS (右摇杆按下)
+#   - 方向: DUp, DDown, DLeft, DRight
+#
 # 延迟配置支持两种格式：
 #   1. 固定延迟: delay: 17  (单位：毫秒)
 #   2. 随机延迟: delay: { min: 10, max: 30 }  (在10-30毫秒之间随机)
@@ -8,7 +27,9 @@
 #   - random: true 表示在 0 ~ value 之间随机等待
 
 hotkeys:
-  - key: "'"
+  # 键盘触发示例
+  - type: keyboard
+    key: "'"
     action: "sequence"
     params:
       steps:
@@ -17,7 +38,7 @@ hotkeys:
           action: "press"
           delay: { min: 24, max: 48}
 
-        - type: "key" 
+        - type: "key"
           value: "R"
           action: "press"
           delay: { min: 14, max: 32}
@@ -32,30 +53,84 @@ hotkeys:
           action: "press"
           delay: { min: 14, max: 32}
 
-        - type: "key" 
+        - type: "key"
           value: "R"
           action: "release"
           delay: { min: 14, max: 32}
-          
+
         - type: "key"
           value: "Space"
           action: "press"
           delay: { min: 14, max: 32}
-          
+
         - type: "key"
           value: "K"
           action: "press"
           delay: { min: 100, max: 200}
 
-        - type: "key" 
+        - type: "key"
           value: "Space"
           action: "release"
           delay: 30
-        - type: "key" 
+        - type: "key"
           value: "T"
           action: "release"
           delay: 25
-        - type: "key" 
+        - type: "key"
+          value: "K"
+          action: "release"
+          delay: { min: 100, max: 200}
+
+  # 手柄 A 键触发示例（可按需启用）
+  - type: gamepad
+    button: "A"
+    action: "sequence"
+    params:
+      steps:
+        - type: "key"
+          value: "E"
+          action: "press"
+          delay: { min: 24, max: 48}
+
+        - type: "key"
+          value: "R"
+          action: "press"
+          delay: { min: 14, max: 32}
+
+        - type: "key"
+          value: "E"
+          action: "release"
+          delay: { min: 14, max: 32}
+
+        - type: "key"
+          value: "T"
+          action: "press"
+          delay: { min: 14, max: 32}
+
+        - type: "key"
+          value: "R"
+          action: "release"
+          delay: { min: 14, max: 32}
+
+        - type: "key"
+          value: "Space"
+          action: "press"
+          delay: { min: 14, max: 32}
+
+        - type: "key"
+          value: "K"
+          action: "press"
+          delay: { min: 100, max: 200}
+
+        - type: "key"
+          value: "Space"
+          action: "release"
+          delay: 30
+        - type: "key"
+          value: "T"
+          action: "release"
+          delay: 25
+        - type: "key"
           value: "K"
           action: "release"
           delay: { min: 100, max: 200}

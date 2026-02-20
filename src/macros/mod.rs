@@ -6,12 +6,13 @@ mod executor;
 mod handler;
 
 pub use executor::{execute_type_text, execute_sequence};
-pub use handler::{keyboard_hook_proc, MacroEvent, MacroPhase};
+pub use handler::{keyboard_hook_proc, MacroEvent, MacroPhase, start_gamepad_forwarder};
 
 use std::sync::{Mutex, mpsc::Sender};
 use once_cell::sync::Lazy;
 use windows::Win32::UI::WindowsAndMessaging::HHOOK;
 use crate::config::Config;
+use crate::gamepad::start_gamepad_thread;
 
 // 全局变量
 static TOGGLE_STATE: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(true));
@@ -31,19 +32,26 @@ static CONFIG: Lazy<Mutex<Option<Config>>> = Lazy::new(|| Mutex::new(None));
 ///
 /// # 说明
 ///
-/// 设置低级键盘钩子监听全局键盘事件，启动宏处理线程
+/// 设置低级键盘钩子监听全局键盘事件，启动宏处理线程和手柄监听线程
 pub fn init_keyboard_macro_system(config: Config) -> Option<HHOOK> {
     // 保存配置
     if let Ok(mut config_guard) = CONFIG.lock() {
         *config_guard = Some(config);
     }
-    
-    handler::start_macro_thread();
-    
+
+    // 启动宏处理线程（接收键盘事件）
+    let macro_sender = handler::start_macro_thread();
+
+    // 启动手柄监听线程
+    let gamepad_receiver = start_gamepad_thread();
+
+    // 启动手柄事件转发
+    handler::start_gamepad_forwarder(gamepad_receiver, macro_sender);
+
     match crate::winapi::keyboard::set_keyboard_hook(Some(handler::keyboard_hook_proc), 0) {
         Ok(hook) => Some(hook),
         Err(e) => {
-            eprintln!("[WARN] 设置键盘钩子失败: {}", e);
+            log::warn!("设置键盘钩子失败: {}", e);
             None
         }
     }
@@ -75,7 +83,7 @@ pub fn set_macro_enabled(enabled: bool) {
 /// * `hook` - 要卸载的钩子句柄
 pub fn cleanup_keyboard_hook(hook: HHOOK) {
     if let Err(e) = crate::winapi::keyboard::unhook_keyboard_hook(hook) {
-        eprintln!("[DEBUG] 卸载键盘钩子失败: {}", e);
+        log::debug!("卸载键盘钩子失败: {}", e);
     }
 }
 

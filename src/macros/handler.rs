@@ -1,9 +1,11 @@
 //! 键盘宏事件处理模块
 //!
-//! 负责处理键盘事件、执行热键动作和管理事件循环
+//! 负责处理键盘和手柄事件、执行热键动作和管理事件循环
 
 use std::thread;
+use std::sync::mpsc::{Receiver, Sender};
 use crate::config::ActionParams;
+use crate::gamepad::GamepadEvent;
 use crate::macros::{get_config, get_event_sender, get_macro_phase, get_toggle_state, set_macro_phase};
 
 /// 宏执行阶段
@@ -18,42 +20,86 @@ pub enum MacroPhase {
 pub enum MacroEvent {
     HotkeyPressed { key_name: String },
     HotkeyReleased { key_name: String },
+    GamepadButtonPressed { button: String },
+    GamepadButtonReleased { button: String },
 }
 
 /// 启动宏处理线程
-pub fn start_macro_thread() {
+///
+/// 返回一个 Sender，用于手柄事件转发
+pub fn start_macro_thread() -> Sender<MacroEvent> {
     use std::sync::mpsc::{self, Sender, Receiver};
-    
+
     let (sender, receiver): (Sender<MacroEvent>, Receiver<MacroEvent>) = mpsc::channel();
-    
+
     // 保存发送者
     use crate::macros::MACRO_EVENT_SENDER;
-    
+
     if let Ok(mut sender_guard) = MACRO_EVENT_SENDER.lock() {
-        *sender_guard = Some(sender);
+        *sender_guard = Some(sender.clone());
     }
-    
+
     // 启动处理线程
     thread::spawn(move || {
         while let Ok(event) = receiver.recv() {
             // 检查宏是否启用
             let should_execute = get_toggle_state();
-            
+
             if should_execute {
                 match event {
                     MacroEvent::HotkeyPressed { key_name } => {
                         if let Err(e) = execute_hotkey_action(&key_name) {
-                            eprintln!("[DEBUG] 执行热键动作失败 ({}): {}", key_name, e);
+                            log::debug!("执行热键动作失败 ({}): {}", key_name, e);
                         }
                     }
                     MacroEvent::HotkeyReleased { key_name } => {
                         if let Err(e) = execute_hotkey_release(&key_name) {
-                            eprintln!("[DEBUG] 执行热键释放失败 ({}): {}", key_name, e);
+                            log::debug!("执行热键释放失败 ({}): {}", key_name, e);
+                        }
+                    }
+                    MacroEvent::GamepadButtonPressed { button } => {
+                        let key_name = format!("GP:{}", button);
+                        log::debug!("手柄按下事件: button={}, key_name={}", button, key_name);
+                        if let Err(e) = execute_hotkey_action(&key_name) {
+                            log::debug!("执行手柄动作失败 ({}): {}", key_name, e);
+                        }
+                    }
+                    MacroEvent::GamepadButtonReleased { button } => {
+                        let key_name = format!("GP:{}", button);
+                        log::debug!("手柄释放事件: button={}, key_name={}", button, key_name);
+                        if let Err(e) = execute_hotkey_release(&key_name) {
+                            log::debug!("执行手柄释放失败 ({}): {}", key_name, e);
                         }
                     }
                 }
             }
         }
+    });
+
+    sender
+}
+
+/// 启动手柄事件转发线程
+pub fn start_gamepad_forwarder(gamepad_receiver: Receiver<GamepadEvent>, macro_sender: Sender<MacroEvent>) {
+    log::info!("手柄事件转发线程已启动");
+    thread::spawn(move || {
+        while let Ok(event) = gamepad_receiver.recv() {
+            log::debug!("转发手柄事件: {:?}", event);
+            let macro_event = match event {
+                GamepadEvent::ButtonPressed { button } => {
+                    MacroEvent::GamepadButtonPressed { button }
+                }
+                GamepadEvent::ButtonReleased { button } => {
+                    MacroEvent::GamepadButtonReleased { button }
+                }
+            };
+
+            if let Err(e) = macro_sender.send(macro_event) {
+                log::warn!("发送手柄事件失败: {}", e);
+                break;
+            }
+        }
+        log::warn!("手柄事件转发线程已退出");
     });
 }
 
@@ -78,8 +124,13 @@ fn execute_hotkey_action(key_name: &str) -> Result<(), Box<dyn std::error::Error
     let config = get_config().ok_or("配置未加载")?;
     
     // 查找热键配置
+    log::debug!("查找热键配置: {}", key_name);
     let hotkey_config = config.find_hotkey(key_name)
-        .ok_or_else(|| format!("未找到热键配置: {}", key_name))?;
+        .ok_or_else(|| {
+            log::debug!("未找到热键配置: {}，可用热键: {:?}", key_name, 
+                config.hotkeys.iter().map(|h| h.key()).collect::<Vec<_>>());
+            format!("未找到热键配置: {}", key_name)
+        })?;
     
     // 执行动作
     match hotkey_config.action.as_str() {
