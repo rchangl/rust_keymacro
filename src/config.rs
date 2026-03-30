@@ -42,7 +42,7 @@ pub enum TriggerSource {
     /// 键盘按键，如 "F2", "'"
     Keyboard { key: String },
     /// 手柄按键，如 "A", "LT", "DUp"
-    Gamepad { button: String },
+    Gamepad { key: String },
 }
 
 impl TriggerSource {
@@ -50,7 +50,7 @@ impl TriggerSource {
     pub fn key_name(&self) -> String {
         match self {
             TriggerSource::Keyboard { key } => key.clone(),
-            TriggerSource::Gamepad { button } => format!("GP:{}", button),
+            TriggerSource::Gamepad { key } => format!("GP:{}", key),
         }
     }
 
@@ -191,7 +191,7 @@ hotkeys:
         let yaml = r#"
 hotkeys:
   - type: gamepad
-    button: "A"
+    key: "A"
     action: "sequence"
     params:
       steps:
@@ -205,7 +205,7 @@ hotkeys:
         assert_eq!(hotkey.action, "sequence");
 
         match &hotkey.trigger {
-            TriggerSource::Gamepad { button } => assert_eq!(button, "A"),
+            TriggerSource::Gamepad { key } => assert_eq!(key, "A"),
             _ => panic!("Expected Gamepad trigger"),
         }
     }

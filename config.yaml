@@ -11,7 +11,7 @@
 #   - 特殊: Space, Enter, Tab, Backspace, Escape, Shift, Ctrl, Alt
 #   - 符号: ` (反引号), ' (单引号)
 #
-# 手柄按键名（button）：
+# 手柄按键名（key）：
 #   - 动作键: A, B, X, Y
 #   - 肩键: LB, RB
 #   - 扳机: LT, RT
@@ -28,109 +28,70 @@
 
 hotkeys:
   # 键盘触发示例
-  - type: keyboard
-    key: "'"
-    action: "sequence"
-    params:
-      steps:
-        - type: "key"
-          value: "E"
-          action: "press"
-          delay: { min: 24, max: 48}
+  # - type: keyboard
+  #   key: "'"
+  #   action: "sequence"
+  #   params:
+  #     steps:
+  #       - type: "key"
+  #         value: "E"
+  #         action: "press"
+  #         delay: { min: 24, max: 48}
 
-        - type: "key"
-          value: "R"
-          action: "press"
-          delay: { min: 14, max: 32}
+  #       - type: "key"
+  #         value: "R"
+  #         action: "press"
+  #         delay: { min: 14, max: 32}
 
-        - type: "key"
-          value: "E"
-          action: "release"
-          delay: { min: 14, max: 32}
+  #       - type: "key"
+  #         value: "E"
+  #         action: "release"
+  #         delay: { min: 14, max: 32}
 
-        - type: "key"
-          value: "T"
-          action: "press"
-          delay: { min: 14, max: 32}
+  #       - type: "key"
+  #         value: "T"
+  #         action: "press"
+  #         delay: { min: 14, max: 32}
 
-        - type: "key"
-          value: "R"
-          action: "release"
-          delay: { min: 14, max: 32}
+  #       - type: "key"
+  #         value: "R"
+  #         action: "release"
+  #         delay: { min: 14, max: 32}
 
-        - type: "key"
-          value: "Space"
-          action: "press"
-          delay: { min: 14, max: 32}
+  #       - type: "key"
+  #         value: "Space"
+  #         action: "press"
+  #         delay: { min: 14, max: 32}
 
-        - type: "key"
-          value: "K"
-          action: "press"
-          delay: { min: 100, max: 200}
+  #       - type: "key"
+  #         value: "K"
+  #         action: "press"
+  #         delay: { min: 100, max: 200}
 
-        - type: "key"
-          value: "Space"
-          action: "release"
-          delay: 30
-        - type: "key"
-          value: "T"
-          action: "release"
-          delay: 25
-        - type: "key"
-          value: "K"
-          action: "release"
-          delay: { min: 100, max: 200}
+  #       - type: "key"
+  #         value: "Space"
+  #         action: "release"
+  #         delay: 30
+  #       - type: "key"
+  #         value: "T"
+  #         action: "release"
+  #         delay: 25
+  #       - type: "key"
+  #         value: "K"
+  #         action: "release"
+  #         delay: { min: 100, max: 200}
 
-  # 手柄 A 键触发示例（可按需启用）
+  # 手柄 A 键触发 - 输入文本
+  # - type: gamepad
+  #   key: "A"
+  #   action: "type_text"
+  #   params:
+  #     text: "Hello World"
+  
   - type: gamepad
-    button: "A"
+    key: "X"
     action: "sequence"
     params:
       steps:
         - type: "key"
-          value: "E"
-          action: "press"
-          delay: { min: 24, max: 48}
-
-        - type: "key"
-          value: "R"
-          action: "press"
-          delay: { min: 14, max: 32}
-
-        - type: "key"
-          value: "E"
-          action: "release"
-          delay: { min: 14, max: 32}
-
-        - type: "key"
-          value: "T"
-          action: "press"
-          delay: { min: 14, max: 32}
-
-        - type: "key"
-          value: "R"
-          action: "release"
-          delay: { min: 14, max: 32}
-
-        - type: "key"
-          value: "Space"
-          action: "press"
-          delay: { min: 14, max: 32}
-
-        - type: "key"
-          value: "K"
-          action: "press"
-          delay: { min: 100, max: 200}
-
-        - type: "key"
-          value: "Space"
-          action: "release"
-          delay: 30
-        - type: "key"
-          value: "T"
-          action: "release"
-          delay: 25
-        - type: "key"
-          value: "K"
-          action: "release"
-          delay: { min: 100, max: 200}
+          value: "n"

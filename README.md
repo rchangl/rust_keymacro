@@ -30,7 +30,7 @@
 hotkeys:
   - type: "keyboard"  # 触发源类型：keyboard 或 gamepad
     key: "热键名称"   # 键盘热键名称（type=keyboard 时使用）
-    button: "A"       # 手柄按钮名称（type=gamepad 时使用）
+    key: "A"          # 手柄按键名称（type=gamepad 时使用）
     action: "操作类型"
     params:
       # 操作参数
@@ -57,9 +57,9 @@ hotkeys:
 使用 Xbox 协议手柄按键作为触发器。
 
 **必需字段：**
-- `button`: 手柄按钮名称
+- `key`: 手柄按键名称
 
-**支持的按钮：**
+**支持的按键：**
 | 按钮名 | 说明 |
 |-------|------|
 | `A` | A 键（底部） |
@@ -184,7 +184,7 @@ hotkeys:
 hotkeys:
   # 手柄 A 键触发空格键
   - type: "gamepad"
-    button: "A"
+    key: "A"
     action: "sequence"
     params:
       steps:
@@ -199,7 +199,7 @@ hotkeys:
 
   # 手柄 B 键输入文本
   - type: "gamepad"
-    button: "B"
+    key: "B"
     action: "type_text"
     params:
       text: "Hello from gamepad!"
@@ -207,7 +207,7 @@ hotkeys:
 
   # 手柄 X 键执行复杂序列
   - type: "gamepad"
-    button: "X"
+    key: "X"
     action: "sequence"
     params:
       steps:
