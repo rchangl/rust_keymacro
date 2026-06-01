@@ -116,6 +116,30 @@ impl Default for KeyAction {
     }
 }
 
+/// 鼠标按钮类型
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum MouseButtonType {
+    Left,
+    Right,
+    Middle,
+}
+
+/// 鼠标动作类型
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum MouseAction {
+    Click,    // 点击（按下+释放）
+    Down,     // 按下
+    Up,       // 释放
+}
+
+impl Default for MouseAction {
+    fn default() -> Self {
+        MouseAction::Click
+    }
+}
+
 /// 序列中的单个步骤
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
@@ -133,21 +157,103 @@ pub enum Step {
         random: Option<bool>,
     },
     Text { value: String, #[serde(default)] delay: Option<DelayConfig> },
+    /// 鼠标点击操作
+    MouseClick { 
+        button: MouseButtonType,
+        #[serde(default)]
+        delay: Option<DelayConfig>,
+    },
+    /// 鼠标按下/释放操作
+    MouseAction { 
+        button: MouseButtonType,
+        action: MouseAction,
+        #[serde(default)]
+        delay: Option<DelayConfig>,
+    },
+    /// 鼠标移动操作
+    MouseMove { 
+        x: i32,
+        y: i32,
+        #[serde(default)]
+        relative: Option<bool>, // true=相对移动，false=绝对移动
+        #[serde(default)]
+        delay: Option<DelayConfig>,
+    },
+    /// 鼠标滚轮操作
+    MouseWheel { 
+        delta: i32, // 正数向上，负数向下
+        #[serde(default)]
+        delay: Option<DelayConfig>,
+    },
 }
 
 impl Config {
-    /// 从文件加载配置
+    /// 从文件加载配置（严格模式，用于测试）
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
         let content = fs::read_to_string(path)?;
         let config: Config = serde_yaml::from_str(&content)?;
         Ok(config)
     }
 
-    /// 从字符串加载配置（用于测试）
+    /// 从文件加载配置（容错模式）
+    ///
+    /// 遇到无效的 hotkey 条目会跳过并记录日志，不会导致整体加载失败。
+    /// 仅在所有 hotkey 都无效时才返回错误。
+    pub fn from_file_lenient<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+        let content = fs::read_to_string(path)?;
+        Self::from_str_lenient(&content)
+    }
+
+    /// 从字符串加载配置（严格模式，用于测试）
     #[allow(dead_code)]
     pub fn from_str(yaml_str: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let config: Config = serde_yaml::from_str(yaml_str)?;
         Ok(config)
+    }
+
+    /// 从字符串加载配置（容错模式）
+    ///
+    /// 逐个解析 hotkey，跳过无效条目，记录警告日志。
+    pub fn from_str_lenient(yaml_str: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let raw: serde_yaml::Value = serde_yaml::from_str(yaml_str)?;
+
+        let hotkeys_raw = raw
+            .get("hotkeys")
+            .and_then(|v| v.as_sequence())
+            .ok_or("配置文件中缺少 hotkeys 字段或格式不正确")?;
+
+        let mut hotkeys = Vec::new();
+        let mut errors: Vec<String> = Vec::new();
+
+        for (i, item) in hotkeys_raw.iter().enumerate() {
+            match serde_yaml::from_value::<HotkeyConfig>(item.clone()) {
+                Ok(hk) => hotkeys.push(hk),
+                Err(e) => {
+                    let msg = format!("跳过无效的热键配置 [{}]: {}", i, e);
+                    log::warn!("{}", msg);
+                    errors.push(msg);
+                }
+            }
+        }
+
+        if hotkeys.is_empty() && !errors.is_empty() {
+            return Err(format!(
+                "所有热键配置均无效，共 {} 个错误:\n{}",
+                errors.len(),
+                errors.join("\n")
+            )
+            .into());
+        }
+
+        if !errors.is_empty() {
+            log::warn!(
+                "配置加载完成，跳过了 {} 个无效热键，有效热键: {}",
+                errors.len(),
+                hotkeys.len()
+            );
+        }
+
+        Ok(Config { hotkeys })
     }
 
     /// 查找指定键的配置

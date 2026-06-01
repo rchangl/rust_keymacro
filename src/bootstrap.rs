@@ -1,14 +1,8 @@
 //! 应用程序启动模块
 //!
-//! 负责加载配置、初始化应用和错误处理
+//! 负责加载配置和错误处理
 
-use crate::app::TrayApp;
 use crate::config::Config;
-use winit::{
-    event_loop::EventLoop,
-    platform::windows::EventLoopBuilderExtWindows,
-};
-use global_hotkey::GlobalHotKeyManager;
 
 /// 加载配置文件
 ///
@@ -26,7 +20,7 @@ pub fn load_config() -> Result<Config, String> {
     
     // 首先尝试从工作目录加载
     if current_dir_config.exists() {
-        return Config::from_file(current_dir_config.to_str().unwrap())
+        return Config::from_file_lenient(current_dir_config.to_str().unwrap())
             .map_err(|e| format!(
                 "加载配置文件失败: {}\n\n配置文件路径: {}\n\n当前工作目录: {}",
                 e,
@@ -44,7 +38,7 @@ pub fn load_config() -> Result<Config, String> {
     
     let exe_dir_config = exe_dir.join("config.yaml");
     
-    Config::from_file(exe_dir_config.to_str().unwrap())
+    Config::from_file_lenient(exe_dir_config.to_str().unwrap())
         .map_err(|e| format!(
             "加载配置文件失败: {}\n\n请确保 config.yaml 文件存在于以下任一目录:\n1. 工作目录: {}\n2. 程序目录: {}\n\n当前工作目录: {}",
             e,
@@ -52,57 +46,6 @@ pub fn load_config() -> Result<Config, String> {
             exe_dir_config.display(),
             current_dir.display()
         ))
-}
-
-/// 运行应用程序
-///
-/// 初始化并启动托盘应用的主循环
-///
-/// # 参数
-///
-/// * `config` - 键盘宏配置
-///
-/// # 返回值
-///
-/// 运行成功返回 Ok，失败返回错误信息
-pub fn run_application(config: Config) -> Result<(), String> {
-    // 创建事件循环
-    let event_loop = EventLoop::builder()
-        .with_any_thread(true)
-        .build()
-        .map_err(|_| "创建事件循环失败".to_string())?;
-
-    // 初始化托盘图标
-    let (tray_icon, quit_item_id, icon_state_0, icon_state_1) = crate::app::init_tray_icon();
-
-    // 注册全局热键
-    let hotkey_manager = GlobalHotKeyManager::new()
-        .map_err(|_| "创建热键管理器失败".to_string())?;
-    
-    let hotkey = global_hotkey::hotkey::HotKey::new(
-        Some(global_hotkey::hotkey::Modifiers::CONTROL),
-        global_hotkey::hotkey::Code::Backquote
-    );
-    
-    hotkey_manager.register(hotkey)
-        .map_err(|_| "注册热键失败".to_string())?;
-
-    // 创建应用实例并运行
-    let mut app = TrayApp::new(
-        quit_item_id,
-        tray_icon::menu::MenuEvent::receiver().clone(),
-        tray_icon::TrayIconEvent::receiver().clone(),
-        hotkey_manager,
-        tray_icon,
-        icon_state_0,
-        icon_state_1,
-        config,
-    );
-
-    event_loop.run_app(&mut app)
-        .map_err(|_| "运行事件循环失败".to_string())?;
-    
-    Ok(())
 }
 
 /// 显示错误对话框

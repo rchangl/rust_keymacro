@@ -15,7 +15,7 @@ use crate::config::Config;
 use crate::gamepad::start_gamepad_thread;
 
 // 全局变量
-static TOGGLE_STATE: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(true));
+static TOGGLE_STATE: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(false));
 static MACRO_PHASE: Lazy<Mutex<MacroPhase>> = Lazy::new(|| Mutex::new(MacroPhase::Idle));
 static MACRO_EVENT_SENDER: Lazy<Mutex<Option<Sender<MacroEvent>>>> = Lazy::new(|| Mutex::new(None));
 static CONFIG: Lazy<Mutex<Option<Config>>> = Lazy::new(|| Mutex::new(None));

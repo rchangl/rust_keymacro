@@ -5,6 +5,7 @@
 
 pub mod window;
 pub mod keyboard;
+pub mod mouse;
 
 // 可以根据需要添加更多 Windows API 封装模块
 // pub mod process;

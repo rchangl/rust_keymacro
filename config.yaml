@@ -1,4 +1,7 @@
-# 键盘宏配置文件
+# 键盘宏配置文件 (GUI 版)
+# 
+# 在 GUI 界面的"配置编辑器"中编辑此配置
+# 点击"应用配置"使更改生效，或点击"保存配置"保存到文件
 #
 # 触发源类型（type）：
 #   - keyboard: 键盘按键触发
@@ -25,6 +28,12 @@
 #
 # Wait 步骤支持随机等待:
 #   - random: true 表示在 0 ~ value 之间随机等待
+#
+# 鼠标操作支持：
+#   - mouse_click: 鼠标点击 (button: left/right/middle)
+#   - mouse_action: 鼠标按下/释放 (button: left/right/middle, action: click/down/up)
+#   - mouse_move: 鼠标移动 (x, y, relative: true/false)
+#   - mouse_wheel: 鼠标滚轮 (delta: 正数向上，负数向下)
 
 hotkeys:
   # 键盘触发示例
@@ -37,37 +46,37 @@ hotkeys:
   #         value: "E"
   #         action: "press"
   #         delay: { min: 24, max: 48}
-
+  #
   #       - type: "key"
   #         value: "R"
   #         action: "press"
   #         delay: { min: 14, max: 32}
-
+  #
   #       - type: "key"
   #         value: "E"
   #         action: "release"
   #         delay: { min: 14, max: 32}
-
+  #
   #       - type: "key"
   #         value: "T"
   #         action: "press"
   #         delay: { min: 14, max: 32}
-
+  #
   #       - type: "key"
   #         value: "R"
   #         action: "release"
   #         delay: { min: 14, max: 32}
-
+  #
   #       - type: "key"
   #         value: "Space"
   #         action: "press"
   #         delay: { min: 14, max: 32}
-
+  #
   #       - type: "key"
   #         value: "K"
   #         action: "press"
   #         delay: { min: 100, max: 200}
-
+  #
   #       - type: "key"
   #         value: "Space"
   #         action: "release"
@@ -88,6 +97,41 @@ hotkeys:
   #   params:
   #     text: "Hello World"
   
+  # 鼠标操作示例 - 手柄 X 键触发鼠标点击和移动
+  # - type: gamepad
+  #   key: "X"
+  #   action: "sequence"
+  #   params:
+  #     steps:
+  #       # 鼠标左键点击
+  #       - type: "mouse_click"
+  #         button: "left"
+  #         delay: 100
+  #       
+  #       # 移动到指定坐标
+  #       - type: "mouse_move"
+  #         x: 500
+  #         y: 300
+  #         delay: 200
+  #       
+  #       # 鼠标拖拽操作
+  #       - type: "mouse_action"
+  #         button: "left"
+  #         action: "down"
+  #       - type: "mouse_move"
+  #         x: 200
+  #         y: 100
+  #         relative: true
+  #         delay: 500
+  #       - type: "mouse_action"
+  #         button: "left"
+  #         action: "up"
+  #       
+  #       # 鼠标滚轮向上滚动
+  #       - type: "mouse_wheel"
+  #         delta: 120
+  
+  # 示例配置 - 手柄 X 键触发键盘按键
   - type: gamepad
     key: "X"
     action: "sequence"
@@ -95,3 +139,4 @@ hotkeys:
       steps:
         - type: "key"
           value: "n"
+          delay: 50

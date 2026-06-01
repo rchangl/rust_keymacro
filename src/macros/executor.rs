@@ -1,12 +1,13 @@
 //! 键盘宏执行模块
 //!
-//! 负责执行各种宏操作，包括输入文本和按键序列
+//! 负责执行各种宏操作，包括输入文本、按键序列和鼠标操作
 
 use rand::Rng;
 use std::thread;
 use std::time::Duration;
-use crate::config::{TypeTextParams, SequenceParams, Step, KeyAction};
+use crate::config::{TypeTextParams, SequenceParams, Step, KeyAction, MouseAction as ConfigMouseAction, MouseButtonType};
 use crate::winapi::keyboard;
+use crate::winapi::mouse;
 
 /// 执行输入文本操作
 pub fn execute_type_text(params: &TypeTextParams) -> Result<(), Box<dyn std::error::Error>> {
@@ -91,6 +92,61 @@ pub fn execute_sequence(params: &SequenceParams) -> Result<(), Box<dyn std::erro
                     } else {
                         simulate_unicode_char(ch)?;
                     }
+                }
+            }
+            Step::MouseClick { button, delay } => {
+                let mouse_button = match button {
+                    MouseButtonType::Left => mouse::MouseButton::Left,
+                    MouseButtonType::Right => mouse::MouseButton::Right,
+                    MouseButtonType::Middle => mouse::MouseButton::Middle,
+                };
+                log::debug!("鼠标点击: {:?}", button);
+                mouse::mouse_click(mouse_button)?;
+                if let Some(d) = delay {
+                    thread::sleep(Duration::from_millis(d.get_delay()));
+                }
+            }
+            Step::MouseAction { button, action, delay } => {
+                let mouse_button = match button {
+                    MouseButtonType::Left => mouse::MouseButton::Left,
+                    MouseButtonType::Right => mouse::MouseButton::Right,
+                    MouseButtonType::Middle => mouse::MouseButton::Middle,
+                };
+                match action {
+                    ConfigMouseAction::Click => {
+                        log::debug!("鼠标点击: {:?}", button);
+                        mouse::mouse_click(mouse_button)?;
+                    }
+                    ConfigMouseAction::Down => {
+                        log::debug!("鼠标按下: {:?}", button);
+                        mouse::mouse_down(&mouse_button)?;
+                    }
+                    ConfigMouseAction::Up => {
+                        log::debug!("鼠标释放: {:?}", button);
+                        mouse::mouse_up(&mouse_button)?;
+                    }
+                }
+                if let Some(d) = delay {
+                    thread::sleep(Duration::from_millis(d.get_delay()));
+                }
+            }
+            Step::MouseMove { x, y, relative, delay } => {
+                if relative == &Some(true) {
+                    log::debug!("鼠标相对移动: ({}, {})", x, y);
+                    mouse::move_mouse_relative(*x, *y)?;
+                } else {
+                    log::debug!("鼠标绝对移动到: ({}, {})", x, y);
+                    mouse::move_mouse_to(*x, *y)?;
+                }
+                if let Some(d) = delay {
+                    thread::sleep(Duration::from_millis(d.get_delay()));
+                }
+            }
+            Step::MouseWheel { delta, delay } => {
+                log::debug!("鼠标滚轮: {}", delta);
+                mouse::mouse_wheel(*delta)?;
+                if let Some(d) = delay {
+                    thread::sleep(Duration::from_millis(d.get_delay()));
                 }
             }
         }
