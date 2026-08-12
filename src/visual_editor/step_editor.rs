@@ -6,89 +6,6 @@ use crate::config::*;
 use crate::visual_editor::VisualEditor;
 use egui::Id;
 
-/// 键盘按键列表
-fn keyboard_key_list() -> Vec<&'static str> {
-    vec![
-        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
-        "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
-        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-        "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
-        "Space", "Enter", "Tab", "Backspace", "Escape",
-        "Shift", "Ctrl", "Alt",
-        "`", "'",
-    ]
-}
-
-/// 编辑输入文本操作
-pub fn edit_type_text_action(
-    editor: &mut VisualEditor,
-    ui: &mut egui::Ui,
-    idx: usize,
-    status_message: &mut String,
-    log_messages: &mut Vec<String>,
-) {
-    ui.label("输入文本配置:");
-    ui.separator();
-    
-    if let ActionParams::TypeText(params) = &editor.config.hotkeys[idx].params {
-        let mut text = params.text.clone();
-        let mut delay_ms = match &params.delay {
-            Some(DelayConfig::Fixed(ms)) => *ms,
-            _ => 10,
-        };
-        let mut min_delay = 5;
-        let mut max_delay = 15;
-        let mut use_range = false;
-        
-        if let Some(DelayConfig::Range { min, max }) = &params.delay {
-            min_delay = *min;
-            max_delay = *max;
-            use_range = true;
-        }
-        
-        ui.label("要输入的文本:");
-        ui.add(egui::TextEdit::multiline(&mut text)
-            .desired_rows(3)
-            .desired_width(f32::INFINITY));
-        
-        ui.label("字符间延迟 (ms):");
-        
-        ui.horizontal(|ui| {
-            ui.radio_value(&mut use_range, false, "固定延迟");
-            ui.radio_value(&mut use_range, true, "随机范围");
-        });
-        
-        if use_range {
-            ui.horizontal(|ui| {
-                ui.label("最小:");
-                ui.add(egui::DragValue::new(&mut min_delay).range(0..=10000));
-                ui.label("最大:");
-                ui.add(egui::DragValue::new(&mut max_delay).range(0..=10000));
-            });
-        } else {
-            ui.add(egui::DragValue::new(&mut delay_ms).range(0..=10000));
-        }
-        
-        if ui.button("✓ 应用文本配置").clicked() {
-            let delay = if use_range {
-                Some(DelayConfig::Range { min: min_delay, max: max_delay })
-            } else {
-                Some(DelayConfig::Fixed(delay_ms))
-            };
-            
-            if let Some(hotkey) = editor.config.hotkeys.get_mut(idx) {
-                hotkey.params = ActionParams::TypeText(TypeTextParams {
-                    text,
-                    delay,
-                });
-                editor.config_changed = true;
-                *status_message = "文本配置已更新".to_string();
-                log_messages.push("[INFO] 更新文本配置".to_string());
-            }
-        }
-    }
-}
-
 /// 编辑按键序列操作
 pub fn edit_sequence_action(
     editor: &mut VisualEditor,
@@ -97,7 +14,7 @@ pub fn edit_sequence_action(
     status_message: &mut String,
     log_messages: &mut Vec<String>,
 ) {
-    ui.label("按键序列编辑:");
+    ui.label("执行序列:");
     ui.separator();
     
     // 显示步骤数量
@@ -118,10 +35,37 @@ pub fn edit_sequence_action(
                 added_idx = add_key_step(editor, idx, status_message, log_messages);
                 ui.close_menu();
             }
-            if ui.button("⏱ 等待").clicked() {
-                added_idx = add_wait_step(editor, idx, status_message, log_messages);
-                ui.close_menu();
-            }
+            
+            // ⏱ 等待：可点击按钮触发添加，后跟可调的等待时间输入
+            let wait_id = Id::new(("pending_wait_ms", idx));
+            let mut wait_val = ui.data(|d| d.get_temp::<u64>(wait_id).unwrap_or(100));
+            ui.horizontal(|ui| {
+                if ui.button("⏱ 等待:").clicked() {
+                    added_idx = add_wait_step_with_value(editor, idx, wait_val, status_message, log_messages);
+                    ui.close_menu();
+                }
+                ui.add(egui::DragValue::new(&mut wait_val).range(1..=60000).speed(10.0));
+                ui.label("ms");
+                ui.data_mut(|d| d.insert_temp(wait_id, wait_val));
+            });
+            
+            // 🎲 随机延迟：可点击按钮触发添加，后跟可调的 min/max 范围输入
+            let mut r_min = ui.data(|d| d.get_temp::<u64>(Id::new(("r_min", idx))).unwrap_or(50));
+            let mut r_max = ui.data(|d| d.get_temp::<u64>(Id::new(("r_max", idx))).unwrap_or(200));
+            ui.horizontal(|ui| {
+                if ui.button("🎲 随机延迟:").clicked() {
+                    added_idx = add_wait_random_step(editor, idx, r_min, r_max, status_message, log_messages);
+                    ui.close_menu();
+                }
+                ui.label("min:");
+                ui.add(egui::DragValue::new(&mut r_min).range(1..=60000).speed(10.0));
+                ui.label("max:");
+                ui.add(egui::DragValue::new(&mut r_max).range(1..=60000).speed(10.0));
+                if r_min > r_max { r_max = r_min; }
+                ui.data_mut(|d| d.insert_temp(Id::new(("r_min", idx)), r_min));
+                ui.data_mut(|d| d.insert_temp(Id::new(("r_max", idx)), r_max));
+            });
+            
             if ui.button("✍ 文本").clicked() {
                 added_idx = add_text_step(editor, idx, status_message, log_messages);
                 ui.close_menu();
@@ -142,22 +86,12 @@ pub fn edit_sequence_action(
             });
         });
         
-        // 删除步骤
-        if let Some(step_idx) = ui.data(|data| data.get_temp::<usize>(Id::new("selected_step"))) {
-            let mut should_remove = false;
-            if ui.button("❌ 删除步骤").clicked() {
-                should_remove = true;
-            }
-            if should_remove {
-                remove_step(editor, idx, step_idx, status_message, log_messages);
-            }
-        }
     });
     
     // 自动选中新添加的步骤
     if let Some(step_idx) = added_idx {
         ui.data_mut(|data| {
-            data.insert_temp(Id::new("selected_step"), Some(step_idx));
+            data.insert_temp(Id::new("selected_step"), step_idx);
         });
     }
     
@@ -165,7 +99,54 @@ pub fn edit_sequence_action(
     if let Some(step_idx) = ui.data(|data| data.get_temp::<usize>(Id::new("selected_step"))) {
         ui.separator();
         ui.label("✏ 编辑步骤详情:");
-        edit_step_detail(editor, ui, idx, step_idx, status_message, log_messages);
+
+        // 获取总步骤数，用于启用/禁用按钮和键盘
+        let total_steps = if let ActionParams::Sequence(params) = &editor.config.hotkeys[idx].params {
+            params.steps.len()
+        } else {
+            0
+        };
+
+        // 上移/下移按钮
+        let mut new_selected: Option<usize> = None;
+
+        ui.horizontal(|ui| {
+            let up_enabled = step_idx > 0;
+            let down_enabled = step_idx + 1 < total_steps;
+
+            if ui.add_enabled(up_enabled, egui::Button::new("⬆ 上移")).clicked() {
+                new_selected = Some(step_idx - 1);
+            }
+            if ui.add_enabled(down_enabled, egui::Button::new("⬇ 下移")).clicked() {
+                new_selected = Some(step_idx + 1);
+            }
+        });
+
+        // 键盘快捷键（上下箭头调整步骤顺序）
+        let key_up = ui.input(|i| i.key_pressed(egui::Key::ArrowUp));
+        let key_down = ui.input(|i| i.key_pressed(egui::Key::ArrowDown));
+
+        if step_idx > 0 && key_up {
+            new_selected = Some(step_idx - 1);
+        } else if step_idx + 1 < total_steps && key_down {
+            new_selected = Some(step_idx + 1);
+        }
+
+        // 执行移动操作
+        if let Some(new_idx) = new_selected {
+            if let ActionParams::Sequence(params) = &mut editor.config.hotkeys[idx].params {
+                params.steps.swap(step_idx, new_idx);
+                editor.config_changed = true;
+                ui.data_mut(|data| {
+                    data.insert_temp(Id::new("selected_step"), new_idx);
+                });
+                *status_message = format!("步骤 {} ↔ {}", step_idx + 1, new_idx + 1);
+                log_messages.push(format!("[INFO] 步骤 {} 与 {} 交换位置", step_idx + 1, new_idx + 1));
+            }
+            edit_step_detail(editor, ui, idx, new_idx, status_message, log_messages);
+        } else {
+            edit_step_detail(editor, ui, idx, step_idx, status_message, log_messages);
+        }
     }
 }
 
@@ -176,7 +157,8 @@ fn show_step_list(
     idx: usize,
 ) {
     let mut delete_idx: Option<usize> = None;
-    
+    // 待处理的按键选择面板打开请求（在可变借用循环完成后使用）
+    let mut pending_key_selector: Option<usize> = None;
     egui::ScrollArea::vertical()
         .id_salt("step_list")
         .auto_shrink([false, false])
@@ -186,92 +168,153 @@ fn show_step_list(
             if let ActionParams::Sequence(params) = &mut editor.config.hotkeys[idx].params {
                 for (i, step) in params.steps.iter_mut().enumerate() {
                     let is_selected = ui.data(|data| data.get_temp::<usize>(Id::new("selected_step")) == Some(i));
-                    
-                    ui.horizontal(|ui| {
-                        match step {
-                            Step::Key { value, .. } => {
-                                // Key 步骤：⌨ 按键: 作为可选择标签，后面直接跟 ComboBox 选择键值
-                                let selected = ui.selectable_label(is_selected, "⌨ 按键:");
-                                if selected.clicked() {
-                                    ui.data_mut(|data| {
-                                        data.insert_temp(Id::new("selected_step"), if is_selected { None } else { Some(i) });
-                                    });
-                                }
-                                let keys = keyboard_key_list();
-                                let mut key_value = value.clone();
-                                egui::ComboBox::from_id_salt(format!("step_key_cb_{}", i))
-                                    .selected_text(key_value.clone())
-                                    .width(60.0)
-                                    .show_ui(ui, |ui| {
-                                        for k in keys {
-                                            ui.selectable_value(&mut key_value, k.to_string(), k);
-                                        }
-                                    });
-                                if key_value != *value {
-                                    *value = key_value;
-                                    editor.config_changed = true;
-                                }
-                            }
-                            _ => {
-                                let label = match step {
-                                    Step::Wait { value, random } => {
-                                        if *random == Some(true) {
-                                            format!("⏱ 随机等待: 0-{}ms", value)
-                                        } else {
-                                            format!("⏱ 等待: {}ms", value)
-                                        }
-                                    }
-                                    Step::Text { value, .. } => format!("✍ 文本: \"{}\"", value),
-                                    Step::MouseClick { button, .. } => format!("🖱 鼠标{}键点击", 
-                                        match button {
-                                            MouseButtonType::Left => "左",
-                                            MouseButtonType::Right => "右",
-                                            MouseButtonType::Middle => "中",
-                                        }),
-                                    Step::MouseAction { button, action, .. } => format!("🖱 鼠标{}键 {:?}", 
-                                        match button {
-                                            MouseButtonType::Left => "左",
-                                            MouseButtonType::Right => "右",
-                                            MouseButtonType::Middle => "中",
-                                        }, action),
-                                    Step::MouseMove { x, y, relative, .. } => {
-                                        if *relative == Some(true) {
-                                            format!("🖱 相对移动: ({}, {})", x, y)
-                                        } else {
-                                            format!("🖱 移动到: ({}, {})", x, y)
-                                        }
-                                    }
-                                    Step::MouseWheel { delta, .. } => {
-                                        if *delta > 0 {
-                                            format!("🖱 滚轮向上: {}", delta)
-                                        } else {
-                                            format!("🖱 滚轮向下: {}", delta.abs())
-                                        }
-                                    }
-                                    _ => String::new(),
-                                };
-                                
-                                if ui.selectable_label(is_selected, label).clicked() {
-                                    ui.data_mut(|data| {
-                                        data.insert_temp(Id::new("selected_step"), if data.get_temp::<usize>(Id::new("selected_step")) == Some(i) {
-                                            None
-                                        } else {
-                                            Some(i)
+
+                    let frame = egui::Frame::none()
+                        .fill(if is_selected {
+                            egui::Color32::from_rgba_premultiplied(50, 100, 200, 80)
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        });
+
+                    frame.show(ui, |ui| {
+                        // 注册背景点击（在子控件之前注册，子控件优先响应）
+                        let bg_id = ui.id().with("step_row_bg").with(i);
+                        let bg_clicked = ui.interact(
+                            ui.max_rect(), bg_id, egui::Sense::click()
+                        ).clicked();
+
+                        ui.horizontal(|ui| {
+                            match step {
+                                Step::Key { value, .. } => {
+                                    let label = ui.add(egui::Label::new("⌨ 按键:").sense(egui::Sense::click()));
+                                    if label.clicked() {
+                                        ui.data_mut(|data| {
+                                            if is_selected {
+                                                data.remove::<usize>(Id::new("selected_step"));
+                                            } else {
+                                                data.insert_temp(Id::new("selected_step"), i);
+                                            }
                                         });
-                                    });
+                                    }
+                                    // 使用按钮打开可视化按键选择面板
+                                    let btn_text = format!("🔑 {}", value);
+                                    if ui.button(btn_text).clicked() {
+                                        pending_key_selector = Some(i);
+                                    }
+                                }
+                                Step::Wait { value } => {
+                                    let label = ui.add(egui::Label::new("⏱ 等待:").sense(egui::Sense::click()));
+                                    if label.clicked() {
+                                        ui.data_mut(|data| {
+                                            if is_selected {
+                                                data.remove::<usize>(Id::new("selected_step"));
+                                            } else {
+                                                data.insert_temp(Id::new("selected_step"), i);
+                                            }
+                                        });
+                                    }
+                                    let resp = ui.add(egui::DragValue::new(value).range(1..=60000).speed(10.0));
+                                    if resp.drag_stopped() || resp.lost_focus() {
+                                        editor.config_changed = true;
+                                    }
+                                    ui.label("ms");
+                                }
+                                Step::WaitRandom { min, max } => {
+                                    let label = ui.add(egui::Label::new("🎲 随机延迟:").sense(egui::Sense::click()));
+                                    if label.clicked() {
+                                        ui.data_mut(|data| {
+                                            if is_selected {
+                                                data.remove::<usize>(Id::new("selected_step"));
+                                            } else {
+                                                data.insert_temp(Id::new("selected_step"), i);
+                                            }
+                                        });
+                                    }
+                                    ui.label("min:");
+                                    let resp = ui.add(egui::DragValue::new(min).range(1..=60000).speed(10.0));
+                                    if resp.drag_stopped() || resp.lost_focus() {
+                                        if *min > *max { *max = *min; }
+                                        editor.config_changed = true;
+                                    }
+                                    ui.label("max:");
+                                    let resp = ui.add(egui::DragValue::new(max).range(1..=60000).speed(10.0));
+                                    if resp.drag_stopped() || resp.lost_focus() {
+                                        if *max < *min { *min = *max; }
+                                        editor.config_changed = true;
+                                    }
+                                    ui.label("ms");
+                                }
+                                _ => {
+                                    let text = match step {
+                                        Step::Text { value, .. } => format!("✍ 文本: \"{}\"", value),
+                                        Step::MouseClick { button, .. } => format!("🖱 鼠标{}键点击",
+                                            match button {
+                                                MouseButtonType::Left => "左",
+                                                MouseButtonType::Right => "右",
+                                                MouseButtonType::Middle => "中",
+                                            }),
+                                        Step::MouseAction { button, action, .. } => format!("🖱 鼠标{}键 {:?}",
+                                            match button {
+                                                MouseButtonType::Left => "左",
+                                                MouseButtonType::Right => "右",
+                                                MouseButtonType::Middle => "中",
+                                            }, action),
+                                        Step::MouseMove { x, y, relative, .. } => {
+                                            if *relative == Some(true) {
+                                                format!("🖱 相对移动: ({}, {})", x, y)
+                                            } else {
+                                                format!("🖱 移动到: ({}, {})", x, y)
+                                            }
+                                        }
+                                        Step::MouseWheel { delta, .. } => {
+                                            if *delta > 0 {
+                                                format!("🖱 滚轮向上: {}", delta)
+                                            } else {
+                                                format!("🖱 滚轮向下: {}", delta.abs())
+                                            }
+                                        }
+                                        _ => String::new(),
+                                    };
+
+                                    let label = ui.add(egui::Label::new(text).sense(egui::Sense::click()));
+                                    if label.clicked() {
+                                        ui.data_mut(|data| {
+                                            if data.get_temp::<usize>(Id::new("selected_step")) == Some(i) {
+                                                data.remove::<usize>(Id::new("selected_step"));
+                                            } else {
+                                                data.insert_temp(Id::new("selected_step"), i);
+                                            }
+                                        });
+                                    }
                                 }
                             }
-                        }
-                        
-                        // 每个步骤行上的删除按钮
-                        if ui.small_button("🗑").clicked() {
-                            delete_idx = Some(i);
+
+                            // 每个步骤行上的删除按钮，右对齐
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui.small_button("🗑").clicked() {
+                                    delete_idx = Some(i);
+                                }
+                            });
+                        });
+
+                        // 点击行空白区域也能选中/取消选中
+                        // 背景点击在子控件之前注册，子控件（Label、Button）注册更晚，
+                        // 所以子控件优先响应，只有行内空白区域才触发背景选中
+                        if bg_clicked {
+                            ui.data_mut(|data| {
+                                if is_selected {
+                                    data.remove::<usize>(Id::new("selected_step"));
+                                } else {
+                                    data.insert_temp(Id::new("selected_step"), i);
+                                }
+                            });
                         }
                     });
+
                 }
             }
         });
-    
+
     // 处理步骤删除（在循环外执行可变操作）
     if let Some(step_idx) = delete_idx {
         remove_step(editor, idx, step_idx, &mut String::new(), &mut Vec::new());
@@ -279,6 +322,20 @@ fn show_step_list(
         ui.data_mut(|data| {
             data.remove::<usize>(Id::new("selected_step"));
         });
+    }
+
+    // 处理按键选择面板的打开请求（在循环外，避免借用冲突）
+    if let Some(step_idx) = pending_key_selector {
+        // 获取当前键值
+        if let ActionParams::Sequence(params) = &editor.config.hotkeys[idx].params {
+            if let Some(Step::Key { value, .. }) = params.steps.get(step_idx) {
+                editor.step_editing_key = value.clone();
+            }
+        }
+        editor.key_selector_for_step = true;
+        editor.key_selector_macro_idx = idx;
+        editor.key_selector_step_idx = step_idx;
+        editor.show_key_selector_window = true;
     }
 }
 
@@ -306,21 +363,45 @@ fn add_key_step(
 }
 
 /// 添加等待步骤
-fn add_wait_step(
+fn add_wait_step_with_value(
     editor: &mut VisualEditor,
     idx: usize,
+    wait_ms: u64,
     status_message: &mut String,
     log_messages: &mut Vec<String>,
 ) -> Option<usize> {
     if let Some(hotkey) = editor.config.hotkeys.get_mut(idx) {
         if let ActionParams::Sequence(params) = &mut hotkey.params {
             params.steps.push(Step::Wait {
-                value: 100,
-                random: None,
+                value: wait_ms,
             });
             let new_idx = params.steps.len() - 1;
-            *status_message = "已添加等待步骤".to_string();
-            log_messages.push("[INFO] 添加等待步骤".to_string());
+            *status_message = format!("已添加等待步骤 ({}ms)", wait_ms);
+            log_messages.push(format!("[INFO] 添加等待步骤 ({}ms)", wait_ms));
+            return Some(new_idx);
+        }
+    }
+    None
+}
+
+/// 添加随机等待步骤
+fn add_wait_random_step(
+    editor: &mut VisualEditor,
+    idx: usize,
+    min_ms: u64,
+    max_ms: u64,
+    status_message: &mut String,
+    log_messages: &mut Vec<String>,
+) -> Option<usize> {
+    if let Some(hotkey) = editor.config.hotkeys.get_mut(idx) {
+        if let ActionParams::Sequence(params) = &mut hotkey.params {
+            params.steps.push(Step::WaitRandom {
+                min: min_ms,
+                max: max_ms,
+            });
+            let new_idx = params.steps.len() - 1;
+            *status_message = format!("已添加随机延迟步骤 ({}~{}ms)", min_ms, max_ms);
+            log_messages.push(format!("[INFO] 添加随机延迟步骤 ({}~{}ms)", min_ms, max_ms));
             return Some(new_idx);
         }
     }
@@ -416,6 +497,7 @@ fn edit_step_detail(
                 Step::MouseAction { .. } => 4,
                 Step::MouseMove { .. } => 5,
                 Step::MouseWheel { .. } => 6,
+                Step::WaitRandom { .. } => 7,
             }
         } else {
             return;
@@ -432,6 +514,7 @@ fn edit_step_detail(
         4 => edit_mouse_action_step(editor, ui, macro_idx, step_idx, status_message, log_messages),
         5 => edit_mouse_move_step(editor, ui, macro_idx, step_idx, status_message, log_messages),
         6 => edit_mouse_wheel_step(editor, ui, macro_idx, step_idx, status_message, log_messages),
+        7 => edit_wait_random_step(editor, ui, macro_idx, step_idx, status_message, log_messages),
         _ => {}
     }
 }
@@ -460,21 +543,42 @@ fn edit_key_step(
             ui.horizontal(|ui| {
                 ui.radio_value(&mut action_str, "press".to_string(), "按下");
                 ui.radio_value(&mut action_str, "release".to_string(), "释放");
-                ui.radio_value(&mut action_str, "complete".to_string(), "完成(按下+释放)");
+                ui.radio_value(&mut action_str, "complete".to_string(), "完整(按下+释放)");
             });
             if action_str != old_action {
-                *action = Some(match action_str.as_str() {
+                let new_action = match action_str.as_str() {
                     "press" => KeyAction::Press,
                     "release" => KeyAction::Release,
                     _ => KeyAction::Complete,
-                });
+                };
+                // 切换到非 Complete 模式时清除延迟，切换到 Complete 时设置默认值
+                if !matches!(new_action, KeyAction::Complete) {
+                    *delay = None;
+                } else if delay.is_none() {
+                    *delay = Some(DelayConfig::Fixed(50));
+                }
+                *action = Some(new_action);
                 editor.config_changed = true;
                 *status_message = "按键动作已更新".to_string();
                 log_messages.push("[INFO] 更新按键动作".to_string());
             }
             
-            ui.label("延迟 (ms):");
-            edit_delay_config(ui, delay);
+            // 只在"完成(按下+释放)"模式下显示延迟输入
+            if matches!(action, Some(KeyAction::Complete)) {
+                ui.horizontal(|ui| {
+                    ui.label("持续时间 (ms):");
+                    let mut val = match delay {
+                        Some(DelayConfig::Fixed(ms)) => *ms,
+                        _ => 50,
+                    };
+                    let resp = ui.add(egui::DragValue::new(&mut val).range(1..=10000).speed(10.0));
+                    *delay = Some(DelayConfig::Fixed(val));
+                    if resp.drag_stopped() || resp.lost_focus() {
+                        editor.config_changed = true;
+                    }
+                    ui.label("ms");
+                });
+            }
         }
     }
 }
@@ -489,32 +593,57 @@ fn edit_wait_step(
     log_messages: &mut Vec<String>,
 ) {
     if let ActionParams::Sequence(params) = &mut editor.config.hotkeys[macro_idx].params {
-        if let Step::Wait { value, random } = &mut params.steps[step_idx] {
+        if let Step::Wait { value } = &mut params.steps[step_idx] {
             ui.label("⏱ 等待配置:");
-            
-            ui.label("等待时间 (ms):");
-            let mut wait_val = value.to_string();
-            ui.text_edit_singleline(&mut wait_val);
-            
-            ui.label("随机等待:");
-            let mut is_random = random.unwrap_or(false);
-            ui.checkbox(&mut is_random, "启用随机等待");
-            
-            if is_random {
-                ui.horizontal(|ui| {
-                    ui.label("随机范围: 0 ~");
-                    ui.label(wait_val.as_str());
-                });
-            }
-            
-            if ui.button("✓ 应用等待配置").clicked() {
-                if let Ok(wait_ms) = wait_val.parse::<u64>() {
-                    *value = wait_ms;
-                    *random = if is_random { Some(true) } else { None };
+            ui.horizontal(|ui| {
+                ui.label("等待时间:");
+                let resp = ui.add(egui::DragValue::new(value).range(1..=60000).speed(10.0));
+                if resp.drag_stopped() || resp.lost_focus() {
                     editor.config_changed = true;
-                    *status_message = "等待配置已更新".to_string();
-                    log_messages.push("[INFO] 更新等待配置".to_string());
                 }
+                ui.label("ms");
+            });
+            if ui.button("✓ 应用等待配置").clicked() {
+                editor.config_changed = true;
+                *status_message = "等待配置已更新".to_string();
+                log_messages.push("[INFO] 更新等待配置".to_string());
+            }
+        }
+    }
+}
+
+/// 编辑随机延迟步骤
+fn edit_wait_random_step(
+    editor: &mut VisualEditor,
+    ui: &mut egui::Ui,
+    macro_idx: usize,
+    step_idx: usize,
+    status_message: &mut String,
+    log_messages: &mut Vec<String>,
+) {
+    if let ActionParams::Sequence(params) = &mut editor.config.hotkeys[macro_idx].params {
+        if let Step::WaitRandom { min, max } = &mut params.steps[step_idx] {
+            ui.label("🎲 随机延迟配置:");
+            ui.horizontal(|ui| {
+                ui.label("最小:");
+                let resp = ui.add(egui::DragValue::new(min).range(1..=60000).speed(10.0));
+                if resp.drag_stopped() || resp.lost_focus() {
+                    if *min > *max { *max = *min; }
+                    editor.config_changed = true;
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label("最大:");
+                let resp = ui.add(egui::DragValue::new(max).range(1..=60000).speed(10.0));
+                if resp.drag_stopped() || resp.lost_focus() {
+                    if *max < *min { *min = *max; }
+                    editor.config_changed = true;
+                }
+            });
+            if ui.button("✓ 应用随机延迟配置").clicked() {
+                editor.config_changed = true;
+                *status_message = "随机延迟配置已更新".to_string();
+                log_messages.push("[INFO] 更新随机延迟配置".to_string());
             }
         }
     }
@@ -742,39 +871,39 @@ fn edit_mouse_wheel_step(
 
 /// 编辑延迟配置（通用函数）
 fn edit_delay_config(ui: &mut egui::Ui, delay: &mut Option<DelayConfig>) {
-    ui.label("延迟 (ms):");
-    let mut delay_type = match delay {
-        Some(DelayConfig::Fixed(ms)) => ("固定".to_string(), ms.to_string(), "".to_string()),
-        Some(DelayConfig::Range { min, max }) => ("范围".to_string(), min.to_string(), max.to_string()),
-        None => ("固定".to_string(), "50".to_string(), "".to_string()),
+    let mut is_range = matches!(delay, Some(DelayConfig::Range { .. }));
+    let mut fixed_val = match delay {
+        Some(DelayConfig::Fixed(ms)) => *ms,
+        _ => 50,
     };
-    
+    let mut min_val = match delay {
+        Some(DelayConfig::Range { min, .. }) => *min,
+        _ => 10,
+    };
+    let mut max_val = match delay {
+        Some(DelayConfig::Range { max, .. }) => *max,
+        _ => 100,
+    };
+
     ui.horizontal(|ui| {
-        ui.radio_value(&mut delay_type.0, "固定".to_string(), "固定延迟");
-        ui.radio_value(&mut delay_type.0, "范围".to_string(), "随机范围");
+        ui.radio_value(&mut is_range, false, "固定延迟");
+        ui.radio_value(&mut is_range, true, "随机范围");
     });
-    
-    if delay_type.0 == "固定" {
-        ui.text_edit_singleline(&mut delay_type.1);
-    } else {
+
+    if is_range {
         ui.horizontal(|ui| {
             ui.label("最小:");
-            ui.text_edit_singleline(&mut delay_type.1);
+            ui.add(egui::DragValue::new(&mut min_val).range(1..=10000));
             ui.label("最大:");
-            ui.text_edit_singleline(&mut delay_type.2);
+            ui.add(egui::DragValue::new(&mut max_val).range(1..=10000));
         });
-    }
-    
-    // 更新 delay 值
-    *delay = if delay_type.0 == "固定" {
-        delay_type.1.parse::<u64>()
-            .ok()
-            .map(DelayConfig::Fixed)
-    } else {
-        if let (Ok(min), Ok(max)) = (delay_type.1.parse(), delay_type.2.parse()) {
-            Some(DelayConfig::Range { min, max })
-        } else {
-            None
+        // 确保 min <= max
+        if min_val > max_val {
+            max_val = min_val;
         }
-    };
+        *delay = Some(DelayConfig::Range { min: min_val, max: max_val });
+    } else {
+        ui.add(egui::DragValue::new(&mut fixed_val).range(1..=10000));
+        *delay = Some(DelayConfig::Fixed(fixed_val));
+    }
 }

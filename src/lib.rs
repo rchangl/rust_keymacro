@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod macros;
+pub mod global_hotkey;
 pub mod gamepad;
 pub mod winapi;
 pub mod overlay;

@@ -4,7 +4,6 @@
 
 use crate::config::*;
 use crate::visual_editor::VisualEditor;
-use crate::visual_editor::key_selector;
 
 /// 显示宏详情编辑（右侧面板）
 pub fn show_macro_detail(
@@ -50,25 +49,24 @@ fn edit_macro_detail(
         
         ui.add_space(5.0);
         
-        // 触发键 - 使用局部变量避免借用冲突
+        // 触发键 - 按钮打开键盘图
         ui.label("触发键:");
-        let mut temp_key = editor.edit_key.clone();
-        
-        if editor.edit_is_keyboard {
-            key_selector::show_keyboard_selector(ui, &mut temp_key);
+        let current_key = if editor.edit_is_keyboard {
+            &editor.edit_keyboard_key
         } else {
-            key_selector::show_gamepad_selector(ui, &mut temp_key);
+            &editor.edit_gamepad_key
+        };
+        let key_label = if current_key.is_empty() {
+            "点击选择...".to_string()
+        } else {
+            current_key.clone()
+        };
+        let btn_text = format!("🔑 {}", key_label);
+        if ui.button(btn_text).clicked() {
+            editor.show_key_selector_window = true;
         }
-        editor.edit_key = temp_key;
         
         ui.add_space(5.0);
-        
-        // 操作类型
-        ui.label("操作类型:");
-        ui.horizontal(|ui| {
-            ui.radio_value(&mut editor.edit_is_sequence, true, "📝 按键序列");
-            ui.radio_value(&mut editor.edit_is_sequence, false, "✍ 输入文本");
-        });
         
         // 自动应用触发配置
         apply_trigger_config(editor, idx);
@@ -76,48 +74,143 @@ fn edit_macro_detail(
         ui.add_space(10.0);
         ui.separator();
         
-        // 根据操作类型显示不同的编辑器
-        if editor.edit_is_sequence {
-            super::step_editor::edit_sequence_action(editor, ui, idx, status_message, log_messages);
+        // 动作类型选择：序列 / 连发
+        ui.label("动作类型:");
+        let is_auto_repeat = {
+            if let Some(hotkey) = editor.config.hotkeys.get(idx) {
+                hotkey.action == "auto_repeat"
+            } else {
+                false
+            }
+        };
+        let mut new_is_auto_repeat = is_auto_repeat;
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut new_is_auto_repeat, false, "📝 按键序列");
+            ui.radio_value(&mut new_is_auto_repeat, true, "🔁 按键连发");
+        });
+        if new_is_auto_repeat != is_auto_repeat {
+            // 切换动作类型
+            if let Some(hotkey) = editor.config.hotkeys.get_mut(idx) {
+                if new_is_auto_repeat {
+                    hotkey.action = "auto_repeat".to_string();
+                    if !matches!(hotkey.params, ActionParams::AutoRepeat(_)) {
+                        hotkey.params = ActionParams::AutoRepeat(AutoRepeatParams::default());
+                    }
+                } else {
+                    hotkey.action = "sequence".to_string();
+                    if !matches!(hotkey.params, ActionParams::Sequence(_)) {
+                        hotkey.params = ActionParams::Sequence(SequenceParams { steps: vec![] });
+                    }
+                }
+                editor.config_changed = true;
+            }
+        }
+
+        ui.add_space(5.0);
+
+        // 根据动作类型显示对应编辑器
+        if new_is_auto_repeat {
+            edit_auto_repeat_action(editor, ui, idx, status_message, log_messages);
         } else {
-            super::step_editor::edit_type_text_action(editor, ui, idx, status_message, log_messages);
+            super::step_editor::edit_sequence_action(editor, ui, idx, status_message, log_messages);
         }
     });
+}
+
+/// 编辑连发参数
+fn edit_auto_repeat_action(
+    editor: &mut VisualEditor,
+    ui: &mut egui::Ui,
+    idx: usize,
+    status_message: &mut String,
+    log_messages: &mut Vec<String>,
+) {
+    if let ActionParams::AutoRepeat(params) = &mut editor.config.hotkeys[idx].params {
+        ui.label("🔁 按键连发配置（按住触发键持续重复目标按键）");
+        ui.separator();
+
+        // 目标按键
+        ui.label("连发目标按键:");
+        let btn_text = format!("🔑 {}", if params.key.is_empty() { "点击选择...".to_string() } else { params.key.clone() });
+        if ui.button(btn_text).clicked() {
+            editor.step_editing_key = params.key.clone();
+            editor.key_selector_for_step = true;
+            editor.key_selector_macro_idx = idx;
+            editor.key_selector_step_idx = usize::MAX; // 标记为连发目标键，非步骤
+            editor.show_key_selector_window = true;
+        }
+
+        ui.add_space(5.0);
+
+        // 按下持续时间
+        ui.horizontal(|ui| {
+            ui.label("按下时长 (ms):");
+            let resp = ui.add(egui::DragValue::new(&mut params.press_ms).range(1..=1000).speed(1.0));
+            if resp.drag_stopped() || resp.lost_focus() {
+                editor.config_changed = true;
+            }
+        });
+
+        // 释放间隔
+        ui.horizontal(|ui| {
+            ui.label("释放间隔 (ms):");
+            let resp = ui.add(egui::DragValue::new(&mut params.release_ms).range(0..=1000).speed(1.0));
+            if resp.drag_stopped() || resp.lost_focus() {
+                editor.config_changed = true;
+            }
+        });
+
+        ui.add_space(5.0);
+        ui.label(format!("⏱ 实际触发频率约: 每 {} ms 触发一次", params.press_ms + params.release_ms));
+
+        if ui.button("✓ 应用连发配置").clicked() {
+            editor.config_changed = true;
+            *status_message = "连发配置已更新".to_string();
+            log_messages.push("[INFO] 更新连发配置".to_string());
+        }
+    }
 }
 
 /// 自动应用触发配置（仅在值真正变化时触发更新）
 fn apply_trigger_config(editor: &mut VisualEditor, idx: usize) {
     if let Some(hotkey) = editor.config.hotkeys.get_mut(idx) {
-        // 计算新的值
-        let new_trigger = if editor.edit_is_keyboard {
-            TriggerSource::Keyboard { key: editor.edit_key.clone() }
+        // 计算新的触发值
+        let key = if editor.edit_is_keyboard {
+            editor.edit_keyboard_key.clone()
         } else {
-            TriggerSource::Gamepad { key: editor.edit_key.clone() }
+            editor.edit_gamepad_key.clone()
         };
-        let new_action = if editor.edit_is_sequence { "sequence" } else { "type_text" }.to_string();
+        let new_trigger = if editor.edit_is_keyboard {
+            TriggerSource::Keyboard { key }
+        } else {
+            TriggerSource::Gamepad { key }
+        };
         
-        // 检查触发源和操作类型是否变化（TriggerSource 未实现 PartialEq，手动比较）
+        // 检查触发源是否变化（TriggerSource 未实现 PartialEq，手动比较）
         let trigger_changed = match (&hotkey.trigger, &new_trigger) {
             (TriggerSource::Keyboard { key: a }, TriggerSource::Keyboard { key: b }) => a != b,
             (TriggerSource::Gamepad { key: a }, TriggerSource::Gamepad { key: b }) => a != b,
             _ => true, // 类型不同，肯定变了
         };
-        let action_changed = hotkey.action != new_action;
         
-        if trigger_changed || action_changed {
+        if trigger_changed {
             hotkey.trigger = new_trigger;
-            hotkey.action = new_action;
-            
-            // 如果切换到type_text但没有params，初始化
-            if !editor.edit_is_sequence {
-                if !matches!(hotkey.params, ActionParams::TypeText(_)) {
-                    hotkey.params = ActionParams::TypeText(TypeTextParams {
-                        text: "Hello World".to_string(),
-                        delay: Some(DelayConfig::Fixed(10)),
-                    });
+            // 保持当前动作类型（sequence 或 auto_repeat），仅确保 params 类型与 action 匹配
+            match hotkey.action.as_str() {
+                "auto_repeat" => {
+                    if !matches!(hotkey.params, ActionParams::AutoRepeat(_)) {
+                        hotkey.params = ActionParams::AutoRepeat(AutoRepeatParams::default());
+                    }
+                }
+                _ => {
+                    hotkey.action = "sequence".to_string();
+                    if !matches!(hotkey.params, ActionParams::Sequence(_)) {
+                        hotkey.params = ActionParams::Sequence(SequenceParams {
+                            steps: vec![],
+                        });
+                    }
                 }
             }
-            
             editor.config_changed = true;
         }
     }

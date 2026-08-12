@@ -32,7 +32,59 @@ impl DelayConfig {
 /// 配置文件根结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    /// 全局快捷键配置（可选，用于控制宏总开关）
+    #[serde(default)]
+    pub global_hotkey: Option<GlobalHotkeyConfig>,
     pub hotkeys: Vec<HotkeyConfig>,
+}
+
+/// 全局快捷键配置
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GlobalHotkeyConfig {
+    /// 修饰键组合，如 "ctrl+alt"，可为空字符串
+    #[serde(default)]
+    pub modifiers: String,
+    /// 主键，如 "q"
+    pub key: String,
+}
+
+impl Default for GlobalHotkeyConfig {
+    fn default() -> Self {
+        Self {
+            modifiers: "ctrl+alt".to_string(),
+            key: "q".to_string(),
+        }
+    }
+}
+
+impl GlobalHotkeyConfig {
+    /// 格式化为可读文本，如 "Ctrl+Alt+Q"
+    pub fn display(&self) -> String {
+        let mods = if self.modifiers.is_empty() {
+            String::new()
+        } else {
+            self.modifiers
+                .split('+')
+                .filter(|s| !s.is_empty())
+                .map(|m| {
+                    match m.to_lowercase().as_str() {
+                        "ctrl" | "control" => "Ctrl".to_string(),
+                        "alt" => "Alt".to_string(),
+                        "shift" => "Shift".to_string(),
+                        "win" | "meta" | "super" => "Win".to_string(),
+                        _ => m.to_string(),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("+")
+        };
+        let key = self.key.trim().to_string();
+        if mods.is_empty() {
+            key
+        } else {
+            format!("{}+{}", mods, key)
+        }
+    }
 }
 
 /// 触发源类型
@@ -85,6 +137,33 @@ impl HotkeyConfig {
 pub enum ActionParams {
     TypeText(TypeTextParams),
     Sequence(SequenceParams),
+    AutoRepeat(AutoRepeatParams),
+}
+
+fn default_press_ms() -> u64 { 20 }
+fn default_release_ms() -> u64 { 30 }
+
+/// 按键连发参数（DNF 风格：按住触发键，持续重复触发目标按键）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoRepeatParams {
+    /// 连发时模拟的目标按键（虚拟键码对应的键名，如 "A"、"Space"）
+    pub key: String,
+    /// 目标按键按下持续时间（毫秒）
+    #[serde(default = "default_press_ms")]
+    pub press_ms: u64,
+    /// 释放后到下一次按下的间隔（毫秒）
+    #[serde(default = "default_release_ms")]
+    pub release_ms: u64,
+}
+
+impl Default for AutoRepeatParams {
+    fn default() -> Self {
+        Self {
+            key: "A".to_string(),
+            press_ms: default_press_ms(),
+            release_ms: default_release_ms(),
+        }
+    }
 }
 
 /// 输入文本参数
@@ -153,8 +232,12 @@ pub enum Step {
     },
     Wait { 
         value: u64,
-        #[serde(default)]
-        random: Option<bool>,
+    },
+    /// 随机等待，范围 [min, max]
+    #[serde(rename = "wait_random")]
+    WaitRandom { 
+        min: u64,
+        max: u64,
     },
     Text { value: String, #[serde(default)] delay: Option<DelayConfig> },
     /// 鼠标点击操作
@@ -253,7 +336,14 @@ impl Config {
             );
         }
 
-        Ok(Config { hotkeys })
+        let global_hotkey = raw
+            .get("global_hotkey")
+            .and_then(|v| serde_yaml::from_value::<GlobalHotkeyConfig>(v.clone()).ok());
+
+        Ok(Config {
+            global_hotkey,
+            hotkeys,
+        })
     }
 
     /// 查找指定键的配置
@@ -395,6 +485,56 @@ hotkeys:
     }
 
     #[test]
+    fn test_parse_auto_repeat_config() {
+        let yaml = r#"
+hotkeys:
+  - type: keyboard
+    key: "X"
+    action: "auto_repeat"
+    params:
+      key: "Space"
+      press_ms: 30
+      release_ms: 20
+"#;
+        let config = Config::from_str(yaml).unwrap();
+        assert_eq!(config.hotkeys.len(), 1);
+
+        let hotkey = &config.hotkeys[0];
+        assert_eq!(hotkey.key(), "X");
+        assert_eq!(hotkey.action, "auto_repeat");
+
+        if let ActionParams::AutoRepeat(params) = &hotkey.params {
+            assert_eq!(params.key, "Space");
+            assert_eq!(params.press_ms, 30);
+            assert_eq!(params.release_ms, 20);
+        } else {
+            panic!("Expected AutoRepeat params");
+        }
+    }
+
+    #[test]
+    fn test_parse_auto_repeat_defaults() {
+        let yaml = r#"
+hotkeys:
+  - type: keyboard
+    key: "Y"
+    action: "auto_repeat"
+    params:
+      key: "A"
+"#;
+        let config = Config::from_str(yaml).unwrap();
+
+        if let ActionParams::AutoRepeat(params) = &config.hotkeys[0].params {
+            // 未指定时使用默认值
+            assert_eq!(params.key, "A");
+            assert_eq!(params.press_ms, 20);
+            assert_eq!(params.release_ms, 30);
+        } else {
+            panic!("Expected AutoRepeat params");
+        }
+    }
+
+    #[test]
     fn test_parse_random_delay_config() {
         let yaml = r#"
 hotkeys:
@@ -404,7 +544,7 @@ hotkeys:
     params:
       steps:
         - { type: "key", value: "a", delay: { min: 10, max: 30 } }
-        - { type: "wait", value: 100, random: true }
+        - { type: "wait_random", min: 0, max: 100 }
         - { type: "text", value: "done", delay: { min: 5, max: 15 } }
 "#;
         let config = Config::from_str(yaml).unwrap();
@@ -424,11 +564,11 @@ hotkeys:
 
             // 测试随机等待
             match &params.steps[1] {
-                Step::Wait { value, random } => {
-                    assert_eq!(*value, 100);
-                    assert_eq!(*random, Some(true));
+                Step::WaitRandom { min, max } => {
+                    assert_eq!(*min, 0);
+                    assert_eq!(*max, 100);
                 }
-                _ => panic!("Expected Wait step"),
+                _ => panic!("Expected WaitRandom step"),
             }
 
             // 测试文本随机延迟

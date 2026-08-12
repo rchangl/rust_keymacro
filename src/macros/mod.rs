@@ -5,7 +5,7 @@
 mod executor;
 mod handler;
 
-pub use executor::{execute_type_text, execute_sequence};
+pub use executor::{execute_type_text, execute_sequence, execute_auto_repeat_once};
 pub use handler::{keyboard_hook_proc, MacroEvent, MacroPhase, start_gamepad_forwarder};
 
 use std::sync::{Mutex, mpsc::Sender};
@@ -34,6 +34,9 @@ static CONFIG: Lazy<Mutex<Option<Config>>> = Lazy::new(|| Mutex::new(None));
 ///
 /// 设置低级键盘钩子监听全局键盘事件，启动宏处理线程和手柄监听线程
 pub fn init_keyboard_macro_system(config: Config) -> Option<HHOOK> {
+    // 重新初始化时停止所有活跃连发，避免旧配置的连发线程残留
+    handler::stop_all_auto_repeats();
+
     // 保存配置
     if let Ok(mut config_guard) = CONFIG.lock() {
         *config_guard = Some(config);
@@ -60,6 +63,8 @@ pub fn init_keyboard_macro_system(config: Config) -> Option<HHOOK> {
 /// 设置配置（用于运行时重载）
 #[allow(dead_code)]
 pub fn set_config(config: Config) {
+    // 配置变化时停止所有活跃连发，避免旧配置的连发线程继续运行
+    handler::stop_all_auto_repeats();
     if let Ok(mut config_guard) = CONFIG.lock() {
         *config_guard = Some(config);
     }
@@ -73,6 +78,17 @@ pub fn set_config(config: Config) {
 pub fn set_macro_enabled(enabled: bool) {
     if let Ok(mut state) = TOGGLE_STATE.lock() {
         *state = enabled;
+    }
+}
+
+/// 切换宏总开关状态（取反）
+///
+/// 供全局快捷键回调使用，可在任意线程调用。
+pub fn toggle_macro_state() {
+    if let Ok(mut state) = TOGGLE_STATE.lock() {
+        *state = !*state;
+        let msg = if *state { "已启用" } else { "已禁用" };
+        log::info!("宏状态已通过全局快捷键切换为: {}", msg);
     }
 }
 

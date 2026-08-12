@@ -37,18 +37,14 @@ pub fn show_macro_list(
                         TriggerSource::Keyboard { key } => key.clone(),
                         TriggerSource::Gamepad { key } => key.clone(),
                     };
-                    let action = &hotkey.action;
                     
-                    // 构建显示文本
+                    // 构建显示文本（根据动作类型显示不同标记）
+                    let action_label = if hotkey.action == "auto_repeat" { "🔁 连发" } else { "📝 序列" };
                     let display_text = format!(
                         "{} {} → {}",
                         if is_keyboard { "⌨" } else { "🎮" },
                         current_key,
-                        match action.as_str() {
-                            "sequence" => "📝 序列",
-                            "type_text" => "✍ 文本",
-                            _ => "❓ 未知",
-                        }
+                        action_label,
                     );
                     
                     // 使用带背景的按钮，点击选中宏

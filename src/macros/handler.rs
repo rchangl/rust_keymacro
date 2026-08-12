@@ -2,11 +2,85 @@
 //!
 //! 负责处理键盘和手柄事件、执行热键动作和管理事件循环
 
-use std::thread;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
-use crate::config::ActionParams;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::thread;
+use crate::config::{ActionParams, AutoRepeatParams};
 use crate::gamepad::GamepadEvent;
 use crate::macros::{get_config, get_event_sender, get_macro_phase, get_toggle_state, set_macro_phase};
+
+/// 活跃连发线程的停止标志
+///
+/// key_name -> 停止标志。按下触发键时启动连发线程并记录标志，
+/// 释放触发键时置位标志停止对应线程。
+static AUTO_REPEAT_STOPS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
+
+fn auto_repeat_stops() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
+    AUTO_REPEAT_STOPS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// 停止指定触发键的所有连发线程
+pub(crate) fn stop_auto_repeat(key_name: &str) {
+    if let Ok(mut stops) = auto_repeat_stops().lock() {
+        if let Some(flag) = stops.remove(key_name) {
+            flag.store(true, Ordering::Relaxed);
+            log::debug!("停止连发: {}", key_name);
+        }
+    }
+}
+
+/// 停止所有连发线程（清理用）
+pub(crate) fn stop_all_auto_repeats() {
+    if let Ok(mut stops) = auto_repeat_stops().lock() {
+        for flag in stops.values() {
+            flag.store(true, Ordering::Relaxed);
+        }
+        stops.clear();
+    }
+}
+
+/// 为指定触发键启动一个连发线程
+///
+/// 若该键已有连发在运行，则保持现有线程（幂等），不会重复启动。
+fn start_auto_repeat(key_name: &str, params: AutoRepeatParams) {
+    // 如果该键已有活跃连发，直接返回，避免长按重复事件频繁重启线程
+    if let Ok(stops) = auto_repeat_stops().lock() {
+        if stops.contains_key(key_name) {
+            return;
+        }
+    }
+
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    {
+        if let Ok(mut stops) = auto_repeat_stops().lock() {
+            // 双重检查，防止并发重复插入
+            if stops.contains_key(key_name) {
+                return;
+            }
+            stops.insert(key_name.to_string(), stop_flag.clone());
+        }
+    }
+
+    let key_name_owned = key_name.to_string();
+    thread::spawn(move || {
+        log::debug!("连发线程启动: {} -> {}", key_name_owned, params.key);
+        while !stop_flag.load(Ordering::Relaxed) {
+            if let Err(e) = crate::macros::execute_auto_repeat_once(&params) {
+                log::warn!("连发执行失败 ({}): {}", key_name_owned, e);
+                break;
+            }
+        }
+        // 线程退出时从 map 中清理（仅当还是同一个 flag）
+        if let Ok(mut stops) = auto_repeat_stops().lock() {
+            if stops.get(&key_name_owned).map(|f| Arc::ptr_eq(f, &stop_flag)).unwrap_or(false) {
+                stops.remove(&key_name_owned);
+            }
+        }
+        log::debug!("连发线程结束: {}", key_name_owned);
+    });
+}
 
 /// 宏执行阶段
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -198,8 +272,22 @@ pub unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: windows::Win
                 // 构建当前按键字符串（简单实现，支持单键）
                 let key_name = vk_to_key_name(kb_struct.vkCode);
                 
-                if config.find_hotkey(&key_name).is_some() {
-                    // 处理按下事件
+                if let Some(hotkey) = config.find_hotkey(&key_name) {
+                    // 连发动作：按住持续重复，释放停止
+                    if hotkey.action == "auto_repeat" {
+                        if keyboard::is_key_down(wparam) {
+                            // 按下（含重复事件）启动/保持连发线程
+                            if let ActionParams::AutoRepeat(params) = &hotkey.params {
+                                start_auto_repeat(&key_name, params.clone());
+                            }
+                            return LRESULT(1); // 阻止原始事件，避免触发键本身生效
+                        } else if keyboard::is_key_up(wparam) {
+                            stop_auto_repeat(&key_name);
+                            return LRESULT(1); // 阻止原始事件
+                        }
+                    }
+                    
+                    // 处理按下事件（type_text / sequence）
                     if keyboard::is_key_down(wparam) {
                         // 检查是否是重复事件（长按自动重复）
                         if keyboard::is_key_repeat(lparam) {

@@ -29,6 +29,24 @@
 # Wait 步骤支持随机等待:
 #   - random: true 表示在 0 ~ value 之间随机等待
 #
+# 操作类型（action）：
+#   - type_text: 输入文本
+#   - sequence: 按键序列
+#   - auto_repeat: 按键连发（DNF 风格：按住触发键，持续重复触发目标按键）
+#
+# 按键连发（auto_repeat）参数说明：
+#   - key: 连发时模拟的目标按键（如 "A"、"Space"）
+#   - press_ms: 目标按键按下持续时间（毫秒，默认 20）
+#   - release_ms: 释放后到下一次按下的间隔（毫秒，默认 30）
+#   示例：按住 X 键，持续重复触发 Space 键，按下 30ms + 间隔 20ms
+#   - type: keyboard
+#     key: "X"
+#     action: "auto_repeat"
+#     params:
+#       key: "Space"
+#       press_ms: 30
+#       release_ms: 20
+#
 # 鼠标操作支持：
 #   - mouse_click: 鼠标点击 (button: left/right/middle)
 #   - mouse_action: 鼠标按下/释放 (button: left/right/middle, action: click/down/up)

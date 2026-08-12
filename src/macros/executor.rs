@@ -5,9 +5,24 @@
 use rand::Rng;
 use std::thread;
 use std::time::Duration;
-use crate::config::{TypeTextParams, SequenceParams, Step, KeyAction, MouseAction as ConfigMouseAction, MouseButtonType};
+use crate::config::{TypeTextParams, SequenceParams, Step, KeyAction, MouseAction as ConfigMouseAction, MouseButtonType, AutoRepeatParams};
 use crate::winapi::keyboard;
 use crate::winapi::mouse;
+
+/// 执行一轮按键连发（按下 + 释放）
+///
+/// 供连发线程循环调用。每次执行一轮完整的按下/释放。
+pub fn execute_auto_repeat_once(params: &AutoRepeatParams) -> Result<(), Box<dyn std::error::Error>> {
+    let vk = parse_key_string(&params.key)
+        .ok_or_else(|| format!("无法解析连发按键: {}", params.key))?;
+
+    keyboard::simulate_key_press(vk)?;
+    thread::sleep(Duration::from_millis(params.press_ms));
+    keyboard::simulate_key_release(vk)?;
+    thread::sleep(Duration::from_millis(params.release_ms));
+
+    Ok(())
+}
 
 /// 执行输入文本操作
 pub fn execute_type_text(params: &TypeTextParams) -> Result<(), Box<dyn std::error::Error>> {
@@ -72,14 +87,12 @@ pub fn execute_sequence(params: &SequenceParams) -> Result<(), Box<dyn std::erro
                     log::warn!("无法解析按键: {}", value);
                 }
             }
-            Step::Wait { value, random } => {
-                if random == &Some(true) {
-                    // 随机范围：0 ~ value
-                    let actual_delay = rand::thread_rng().gen_range(0..=*value);
-                    thread::sleep(Duration::from_millis(actual_delay));
-                } else {
-                    thread::sleep(Duration::from_millis(*value));
-                }
+            Step::Wait { value } => {
+                thread::sleep(Duration::from_millis(*value));
+            }
+            Step::WaitRandom { min, max } => {
+                let actual_delay = rand::thread_rng().gen_range(*min..=*max);
+                thread::sleep(Duration::from_millis(actual_delay));
             }
             Step::Text { value, delay } => {
                 for ch in value.chars() {
@@ -218,6 +231,37 @@ fn parse_key_string(key: &str) -> Option<u16> {
         "SHIFT" | "Shift" => Some(VK_SHIFT.0),
         "CTRL" | "Ctrl" => Some(VK_CONTROL.0),
         "ALT" | "Alt" => Some(VK_MENU.0),
+        // 方向键
+        "UP" | "Up" => Some(VK_UP.0),
+        "DOWN" | "Down" => Some(VK_DOWN.0),
+        "LEFT" | "Left" => Some(VK_LEFT.0),
+        "RIGHT" | "Right" => Some(VK_RIGHT.0),
+        // 导航/编辑键
+        "INSERT" | "Insert" => Some(VK_INSERT.0),
+        "HOME" | "Home" => Some(VK_HOME.0),
+        "PAGEUP" | "PageUp" => Some(VK_PRIOR.0),
+        "DELETE" | "Delete" => Some(VK_DELETE.0),
+        "END" | "End" => Some(VK_END.0),
+        "PAGEDOWN" | "PageDown" => Some(VK_NEXT.0),
+        "CAPSLOCK" | "CapsLock" => Some(VK_CAPITAL.0),
+        "WIN" | "Win" => Some(VK_LWIN.0),
+        "MENU" | "Menu" => Some(VK_APPS.0),
+        // 数字小键盘
+        "NUMPAD0" => Some(VK_NUMPAD0.0),
+        "NUMPAD1" => Some(VK_NUMPAD1.0),
+        "NUMPAD2" => Some(VK_NUMPAD2.0),
+        "NUMPAD3" => Some(VK_NUMPAD3.0),
+        "NUMPAD4" => Some(VK_NUMPAD4.0),
+        "NUMPAD5" => Some(VK_NUMPAD5.0),
+        "NUMPAD6" => Some(VK_NUMPAD6.0),
+        "NUMPAD7" => Some(VK_NUMPAD7.0),
+        "NUMPAD8" => Some(VK_NUMPAD8.0),
+        "NUMPAD9" => Some(VK_NUMPAD9.0),
+        // 功能键 F1-F24
+        s if s.starts_with('F') && s.len() > 1
+            && s[1..].parse::<u32>().map(|n| (1..=24).contains(&n)).unwrap_or(false) => {
+            Some(s[1..].parse::<u32>().map(|n| (0x70 + n - 1) as u16).unwrap())
+        }
         _ => None,
     }
 }
